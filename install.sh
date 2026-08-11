@@ -205,6 +205,90 @@ raise SystemExit(0 if start_docker_service() else 1)
 fi
 
 
+
+# ============================================================
+# AppArmor
+# ============================================================
+
+APPARMOR_ENABLED="no"
+
+if [ -r /sys/module/apparmor/parameters/enabled ]; then
+    APPARMOR_VALUE="$(cat /sys/module/apparmor/parameters/enabled 2>/dev/null || true)"
+
+    case "$APPARMOR_VALUE" in
+        Y*|y*)
+            APPARMOR_ENABLED="yes"
+            ;;
+    esac
+fi
+
+if [ "$APPARMOR_ENABLED" = "yes" ]; then
+
+    echo "AppArmor: ✅ activo"
+
+    if ! command -v apparmor_parser >/dev/null 2>&1; then
+
+        echo "AppArmor está activo pero falta apparmor_parser."
+        echo "Intentando instalarlo..."
+
+        case "$PACKAGE_MANAGER" in
+
+            apt)
+                sudo apt-get update
+                sudo apt-get install -y apparmor
+                ;;
+
+            pacman)
+                sudo pacman -S --needed --noconfirm apparmor
+                ;;
+
+            *)
+                echo
+                echo "ERROR: No se pudo instalar AppArmor automáticamente."
+                exit 1
+                ;;
+
+        esac
+    fi
+
+    APPARMOR_SOURCE="$REPO_ROOT/common/security/apparmor-linux-desktop-containers"
+    APPARMOR_TARGET="/etc/apparmor.d/linux-desktop-containers"
+
+    if [ ! -f "$APPARMOR_SOURCE" ]; then
+        echo
+        echo "ERROR: No existe el perfil AppArmor del proyecto:"
+        echo "  $APPARMOR_SOURCE"
+        exit 1
+    fi
+
+    echo "Instalando perfil AppArmor..."
+
+    sudo install \
+        -m 0644 \
+        "$APPARMOR_SOURCE" \
+        "$APPARMOR_TARGET"
+
+    if ! sudo apparmor_parser \
+        -r \
+        -W \
+        "$APPARMOR_TARGET"
+    then
+        echo
+        echo "ERROR: No fue posible cargar el perfil AppArmor."
+        exit 1
+    fi
+
+    echo "Perfil AppArmor: ✅ linux-desktop-containers"
+    echo
+
+else
+
+    echo "AppArmor: no activo"
+    echo
+
+fi
+
+
 # ============================================================
 # Directorios
 # ============================================================

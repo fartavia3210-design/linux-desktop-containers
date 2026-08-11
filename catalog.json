@@ -32,7 +32,7 @@
 
           "security": {
             "seccomp": "common/security/seccomp-brave.json",
-	    "apparmor": "unconfined"
+	    "apparmor": "linux-desktop-containers"
           },
 
           "shortcut": {
