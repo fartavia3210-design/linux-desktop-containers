@@ -3,17 +3,60 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+def apparmor_enabled() -> bool:
+    """
+    Comprueba si AppArmor está activo
+    en el kernel del host.
+    """
+
+    path = Path(
+        "/sys/module/apparmor/parameters/enabled"
+    )
+
+    if not path.is_file():
+        return False
+
+    try:
+        value = path.read_text(
+            encoding="utf-8"
+        ).strip()
+
+        return value.upper().startswith("Y")
+
+    except OSError:
+        return False
+
+
+def _run(
+    command: list[str],
+    *,
+    capture_output: bool = False
+) -> subprocess.CompletedProcess:
+    """
+    Ejecuta un comando del sistema.
+    """
+
+    return subprocess.run(
+        command,
+        text=True,
+        capture_output=capture_output,
+        check=False
+    )
+
 
 def container_exists(name: str) -> bool:
     """
-    Comprueba si un contenedor existe, esté iniciado o detenido.
+    Comprueba si un contenedor existe,
+    independientemente de si está iniciado.
     """
 
-    result = subprocess.run(
-        ["docker", "container", "inspect", name],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False
+    result = _run(
+        [
+            "docker",
+            "inspect",
+            name
+        ],
+        capture_output=True
     )
 
     return result.returncode == 0
@@ -21,13 +64,13 @@ def container_exists(name: str) -> bool:
 
 def container_running(name: str) -> bool:
     """
-    Comprueba si un contenedor existe y está ejecutándose.
+    Comprueba si un contenedor está ejecutándose.
     """
 
     if not container_exists(name):
         return False
 
-    result = subprocess.run(
+    result = _run(
         [
             "docker",
             "inspect",
@@ -35,15 +78,13 @@ def container_running(name: str) -> bool:
             "{{.State.Running}}",
             name
         ],
-        capture_output=True,
-        text=True,
-        check=False
+        capture_output=True
     )
 
-    return (
-        result.returncode == 0
-        and result.stdout.strip() == "true"
-    )
+    if result.returncode != 0:
+        return False
+
+    return result.stdout.strip().lower() == "true"
 
 
 def start_container(name: str) -> bool:
@@ -57,9 +98,12 @@ def start_container(name: str) -> bool:
     if container_running(name):
         return True
 
-    result = subprocess.run(
-        ["docker", "start", name],
-        check=False
+    result = _run(
+        [
+            "docker",
+            "start",
+            name
+        ]
     )
 
     return result.returncode == 0
@@ -67,7 +111,10 @@ def start_container(name: str) -> bool:
 
 def stop_container(name: str) -> bool:
     """
-    Detiene un contenedor existente.
+    Detiene un contenedor.
+
+    Si no existe o ya está detenido,
+    se considera una operación válida.
     """
 
     if not container_exists(name):
@@ -76,33 +123,42 @@ def stop_container(name: str) -> bool:
     if not container_running(name):
         return True
 
-    result = subprocess.run(
-        ["docker", "stop", name],
-        check=False
+    result = _run(
+        [
+            "docker",
+            "stop",
+            name
+        ]
     )
 
     return result.returncode == 0
 
 
-def remove_container(name: str, force: bool = False) -> bool:
+def remove_container(
+    name: str,
+    *,
+    force: bool = True
+) -> bool:
     """
     Elimina un contenedor.
+
+    Si no existe, devuelve True.
     """
 
     if not container_exists(name):
         return True
 
-    command = ["docker", "rm"]
+    command = [
+        "docker",
+        "rm"
+    ]
 
     if force:
         command.append("-f")
 
     command.append(name)
 
-    result = subprocess.run(
-        command,
-        check=False
-    )
+    result = _run(command)
 
     return result.returncode == 0
 
@@ -111,16 +167,30 @@ def create_container(
     *,
     image: str,
     name: str,
-    container_port: int,
+    container_port: int = 3389,
     shm_size: str = "1g",
-    seccomp_profile: Path | None = None,
+    seccomp_profile: str | Path | None = None,
+    apparmor_profile: str | None = None,
     environment: dict[str, str] | None = None
 ) -> bool:
     """
-    Crea un contenedor nuevo sin iniciarlo.
+    Crea un contenedor Docker.
 
-    Docker selecciona automáticamente un puerto libre
-    del host y lo publica solamente en 127.0.0.1.
+    El puerto del host se asigna automáticamente
+    y únicamente se publica sobre 127.0.0.1.
+
+    security:
+        seccomp_profile
+            Perfil seccomp personalizado.
+
+        apparmor_profile
+            Perfil AppArmor opcional.
+
+            Ejemplo:
+                unconfined
+
+    environment:
+        Variables de entorno adicionales.
     """
 
     if container_exists(name):
@@ -134,19 +204,57 @@ def create_container(
         "--shm-size",
         shm_size,
         "-p",
-        f"127.0.0.1::{container_port}"
+        f"127.0.0.1::{container_port}",
     ]
 
+    # --------------------------------------------------------
+    # Seccomp
+    # --------------------------------------------------------
+
     if seccomp_profile is not None:
+
+        seccomp_path = Path(
+            seccomp_profile
+        ).expanduser().resolve()
+
+        if not seccomp_path.is_file():
+            print(
+                "ERROR: No existe el perfil seccomp:"
+            )
+            print(
+                f"  {seccomp_path}"
+            )
+
+            return False
+
         command.extend(
             [
                 "--security-opt",
-                f"seccomp={seccomp_profile}"
+                f"seccomp={seccomp_path}"
             ]
         )
 
+    # --------------------------------------------------------
+    # AppArmor
+    # --------------------------------------------------------
+
+    if apparmor_profile and apparmor_enabled():
+
+        command.extend(
+            [
+                "--security-opt",
+                f"apparmor={apparmor_profile}"
+            ]
+        )
+
+    # --------------------------------------------------------
+    # Variables de entorno
+    # --------------------------------------------------------
+
     if environment:
+
         for key, value in environment.items():
+
             command.extend(
                 [
                     "-e",
@@ -156,36 +264,31 @@ def create_container(
 
     command.append(image)
 
-    result = subprocess.run(
-        command,
-        check=False
-    )
+    result = _run(command)
 
     return result.returncode == 0
 
 
 def get_host_port(
     name: str,
-    container_port: int
+    container_port: int = 3389
 ) -> int | None:
     """
-    Obtiene el puerto que Docker asignó automáticamente
-    en el host para un puerto del contenedor.
+    Obtiene el puerto asignado por Docker
+    en el host.
     """
 
     if not container_exists(name):
         return None
 
-    result = subprocess.run(
+    result = _run(
         [
             "docker",
             "port",
             name,
             f"{container_port}/tcp"
         ],
-        capture_output=True,
-        text=True,
-        check=False
+        capture_output=True
     )
 
     if result.returncode != 0:
@@ -196,19 +299,38 @@ def get_host_port(
     if not output:
         return None
 
+    # Ejemplo:
+    #
+    # 127.0.0.1:32770
+
+    line = output.splitlines()[0]
+
     try:
-        return int(output.rsplit(":", 1)[1])
-    except (IndexError, ValueError):
+        port_text = line.rsplit(
+            ":",
+            1
+        )[1]
+
+        return int(port_text)
+
+    except (
+        IndexError,
+        ValueError
+    ):
         return None
 
 
 def get_status(name: str) -> str:
     """
-    Devuelve un estado sencillo del contenedor.
+    Devuelve un estado sencillo:
+
+        missing
+        running
+        stopped
     """
 
     if not container_exists(name):
-        return "not-installed"
+        return "missing"
 
     if container_running(name):
         return "running"

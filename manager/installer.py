@@ -141,17 +141,23 @@ def create_desktop_container(
     container = desktop["container"]
 
     return create_container(
-        image=desktop["image"]["remote"],
-        name=container["name"],
-        container_port=container["port"],
-        shm_size=container.get(
-            "shm_size",
-            "1g"
-        ),
-        seccomp_profile=resolve_seccomp(
-            desktop
-        )
+    image=desktop["image"]["remote"],
+    name=container["name"],
+    container_port=container["port"],
+    shm_size=container.get(
+        "shm_size",
+        "1g"
+    ),
+    seccomp_profile=resolve_seccomp(
+        desktop
+    ),
+    apparmor_profile=desktop.get(
+        "security",
+        {}
+    ).get(
+        "apparmor"
     )
+)
 
 
 def create_desktop_shortcut(
