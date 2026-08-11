@@ -1,0 +1,96 @@
+{
+  "arch": {
+    "name": "Arch Linux",
+    "desktops": {
+      "xfce": {
+        "name": "XFCE",
+        "available": true,
+        "image": "arch-xfce:1.0.0",
+        "container": "arch-xfce",
+        "launcher": "distros/arch/xfce/launch.sh"
+      },
+      "kde": {
+        "name": "KDE Plasma",
+        "available": false
+      },
+      "gnome": {
+        "name": "GNOME",
+        "available": false
+      }
+    }
+  },
+
+  "debian": {
+    "name": "Debian",
+    "desktops": {
+      "xfce": {
+        "name": "XFCE",
+        "available": false
+      },
+      "kde": {
+        "name": "KDE Plasma",
+        "available": false
+      },
+      "gnome": {
+        "name": "GNOME",
+        "available": false
+      }
+    }
+  },
+
+  "ubuntu": {
+    "name": "Ubuntu",
+    "desktops": {
+      "xfce": {
+        "name": "XFCE",
+        "available": false
+      },
+      "kde": {
+        "name": "KDE Plasma",
+        "available": false
+      },
+      "gnome": {
+        "name": "GNOME",
+        "available": false
+      }
+    }
+  },
+
+  "fedora": {
+    "name": "Fedora",
+    "desktops": {
+      "xfce": {
+        "name": "XFCE",
+        "available": false
+      },
+      "kde": {
+        "name": "KDE Plasma",
+        "available": false
+      },
+      "gnome": {
+        "name": "GNOME",
+        "available": false
+      }
+    }
+  },
+
+  "xubuntu": {
+    "name": "Xubuntu",
+    "desktops": {
+      "xfce": {
+        "name": "XFCE",
+        "available": false
+      }
+    }
+  },
+
+  "lubuntu": {
+    "name": "Lubuntu",
+    "desktops": {
+      "lxqt": {
+        "name": "LXQt",
+        "available": false
+      }
+    }
+  }
+}

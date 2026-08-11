@@ -1,0 +1,137 @@
+#!/usr/bin/env python3
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+
+REPO_ROOT = Path(__file__).resolve().parent
+CATALOG_FILE = REPO_ROOT / "catalog.json"
+
+
+def clear():
+    print("\033[2J\033[H", end="")
+
+
+def load_catalog():
+    try:
+        with CATALOG_FILE.open("r", encoding="utf-8") as file:
+            return json.load(file)
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"Error leyendo catalog.json: {error}")
+        sys.exit(1)
+
+
+def choose(title, options):
+    while True:
+        clear()
+
+        print("=" * 42)
+        print("       Linux Desktop Containers")
+        print("=" * 42)
+        print()
+        print(title)
+        print()
+
+        for index, option in enumerate(options, start=1):
+            print(f"  {index}) {option}")
+
+        print()
+        print("  0) Volver / Salir")
+        print()
+
+        choice = input("> ").strip()
+
+        if choice == "0":
+            return None
+
+        if choice.isdigit():
+            index = int(choice) - 1
+
+            if 0 <= index < len(options):
+                return index
+
+
+def main():
+    catalog = load_catalog()
+
+    while True:
+        distro_keys = list(catalog.keys())
+        distro_names = [catalog[key]["name"] for key in distro_keys]
+
+        distro_index = choose(
+            "Selecciona una distribución:",
+            distro_names
+        )
+
+        if distro_index is None:
+            break
+
+        distro_key = distro_keys[distro_index]
+        distro = catalog[distro_key]
+
+        desktop_keys = list(distro["desktops"].keys())
+
+        desktop_labels = []
+
+        for key in desktop_keys:
+            desktop = distro["desktops"][key]
+
+            status = (
+                "Disponible"
+                if desktop.get("available", False)
+                else "Próximamente"
+            )
+
+            desktop_labels.append(
+                f'{desktop["name"]} [{status}]'
+            )
+
+        desktop_index = choose(
+            f'{distro["name"]} - Selecciona escritorio:',
+            desktop_labels
+        )
+
+        if desktop_index is None:
+            continue
+
+        desktop_key = desktop_keys[desktop_index]
+        desktop = distro["desktops"][desktop_key]
+
+        if not desktop.get("available", False):
+            print()
+            print(
+                f'{distro["name"]} + {desktop["name"]} '
+                "todavía no está disponible."
+            )
+            input("\nEnter para continuar...")
+            continue
+
+        launcher = REPO_ROOT / desktop["launcher"]
+
+        if not launcher.is_file():
+            print()
+            print(f"No se encontró el launcher:")
+            print(launcher)
+            input("\nEnter para continuar...")
+            continue
+
+        clear()
+
+        print(
+            f'Iniciando {distro["name"]} + '
+            f'{desktop["name"]}...'
+        )
+        print()
+
+        subprocess.run([str(launcher)])
+
+        input("\nEnter para volver al menú...")
+
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        print("\nSaliendo...")
