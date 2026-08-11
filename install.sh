@@ -103,7 +103,9 @@ for dependency in missing_dependencies():
 
     echo
 
-    if [ "$PACKAGE_MANAGER" = "pacman" ]; then
+    if [ "$PACKAGE_MANAGER" = "pacman" ] || \
+   [ "$PACKAGE_MANAGER" = "apt" ] || \
+   [ "$PACKAGE_MANAGER" = "dnf" ]; then
 
         read -r -p "¿Instalar automáticamente? [S/n]: " ANSWER
 

@@ -1,103 +1,195 @@
 from __future__ import annotations
 
+import os
+import platform
 import shutil
 import subprocess
-import sys
 from pathlib import Path
 
 
-def command_exists(command: str) -> bool:
-    """
-    Comprueba si un comando existe en el PATH.
-    """
+# ============================================================
+# Utilidades generales
+# ============================================================
 
+def command_exists(command: str) -> bool:
     return shutil.which(command) is not None
 
 
-def docker_running() -> bool:
-    """
-    Comprueba si Docker responde correctamente.
-    """
+def run_command(
+    command: list[str],
+    *,
+    quiet: bool = False
+) -> bool:
 
+    try:
+        result = subprocess.run(
+            command,
+            stdout=(
+                subprocess.DEVNULL
+                if quiet
+                else None
+            ),
+            stderr=(
+                subprocess.DEVNULL
+                if quiet
+                else None
+            ),
+            check=False
+        )
+
+        return result.returncode == 0
+
+    except (OSError, FileNotFoundError):
+        return False
+
+
+# ============================================================
+# Docker
+# ============================================================
+
+def docker_running() -> bool:
     if not command_exists("docker"):
         return False
 
-    result = subprocess.run(
+    return run_command(
         ["docker", "info"],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        check=False
+        quiet=True
     )
 
-    return result.returncode == 0
 
+def docker_buildx_available() -> bool:
+    if not command_exists("docker"):
+        return False
+
+    return run_command(
+        [
+            "docker",
+            "buildx",
+            "version"
+        ],
+        quiet=True
+    )
+
+
+# ============================================================
+# FreeRDP
+# ============================================================
 
 def detect_freerdp() -> str | None:
     """
-    Detecta un cliente FreeRDP compatible.
+    Busca clientes FreeRDP conocidos.
+
+    Debian 13:
+        xfreerdp3
+
+    Arch:
+        xfreerdp3
+
+    Fedora:
+        xfreerdp
+
+    También contempla los clientes SDL.
     """
 
-    clients = [
+    candidates = [
         "xfreerdp3",
         "sdl-freerdp3",
-        "xfreerdp"
+        "xfreerdp",
+        "sdl-freerdp",
     ]
 
-    for client in clients:
-        if command_exists(client):
-            return client
+    for command in candidates:
+        path = shutil.which(command)
+
+        if path:
+            return command
 
     return None
 
 
+# ============================================================
+# Detección de distribución
+# ============================================================
+
 def detect_host_distro() -> dict:
     """
-    Detecta la distribución Linux del host
-    usando /etc/os-release.
+    Lee /etc/os-release.
+
+    Retorna por ejemplo:
+
+    {
+        "id": "cachyos",
+        "id_like": ["arch"],
+        "name": "CachyOS"
+    }
     """
 
-    os_release = Path("/etc/os-release")
-
-    if not os_release.is_file():
-        return {
-            "id": None,
-            "id_like": [],
-            "name": "Unknown Linux"
-        }
+    os_release = Path(
+        "/etc/os-release"
+    )
 
     data = {}
 
-    for line in os_release.read_text(
-        encoding="utf-8"
-    ).splitlines():
+    if os_release.is_file():
 
-        if "=" not in line:
-            continue
+        for raw_line in os_release.read_text(
+            encoding="utf-8",
+            errors="ignore"
+        ).splitlines():
 
-        key, value = line.split("=", 1)
+            line = raw_line.strip()
 
-        data[key] = value.strip().strip('"')
+            if (
+                not line
+                or line.startswith("#")
+                or "=" not in line
+            ):
+                continue
 
-    distro_id = data.get("ID")
+            key, value = line.split(
+                "=",
+                1
+            )
+
+            value = value.strip().strip(
+                "\"'"
+            )
+
+            data[key] = value
+
+    distro_id = data.get(
+        "ID",
+        ""
+    ).lower()
 
     id_like = data.get(
         "ID_LIKE",
         ""
-    ).split()
+    ).lower().split()
+
+    name = data.get(
+        "PRETTY_NAME",
+        data.get(
+            "NAME",
+            distro_id or "Linux"
+        )
+    )
 
     return {
         "id": distro_id,
         "id_like": id_like,
-        "name": data.get(
-            "PRETTY_NAME",
-            distro_id or "Unknown Linux"
-        )
+        "name": name
     }
 
 
 def detect_package_manager() -> str | None:
     """
-    Detecta el gestor de paquetes principal.
+    Retorna:
+
+        pacman
+        apt
+        dnf
+        None
     """
 
     distro = detect_host_distro()
@@ -105,136 +197,223 @@ def detect_package_manager() -> str | None:
     distro_id = distro["id"]
     id_like = distro["id_like"]
 
+    # Arch y derivados
     if (
-        distro_id in {"arch", "cachyos", "manjaro"}
+        distro_id in {
+            "arch",
+            "cachyos",
+            "manjaro"
+        }
         or "arch" in id_like
     ):
-        return "pacman"
+        if command_exists("pacman"):
+            return "pacman"
 
+    # Debian, Ubuntu y derivados
     if (
-        distro_id in {"debian", "ubuntu"}
+        distro_id in {
+            "debian",
+            "ubuntu",
+            "xubuntu",
+            "lubuntu",
+            "linuxmint",
+            "pop"
+        }
         or "debian" in id_like
         or "ubuntu" in id_like
     ):
-        return "apt"
+        if (
+            command_exists("apt")
+            or command_exists("apt-get")
+        ):
+            return "apt"
 
+    # Fedora y derivados
     if (
-        distro_id == "fedora"
+        distro_id in {
+            "fedora"
+        }
         or "fedora" in id_like
         or "rhel" in id_like
     ):
+        if command_exists("dnf"):
+            return "dnf"
+
+    # Fallback por comandos disponibles
+    if command_exists("pacman"):
+        return "pacman"
+
+    if (
+        command_exists("apt")
+        or command_exists("apt-get")
+    ):
+        return "apt"
+
+    if command_exists("dnf"):
         return "dnf"
 
     return None
 
 
-def check_dependencies() -> dict:
-    """
-    Devuelve el estado de las dependencias principales.
-    """
+# ============================================================
+# Estado de dependencias
+# ============================================================
 
-    freerdp = detect_freerdp()
+def check_dependencies() -> dict:
+    freerdp_client = detect_freerdp()
+
+    docker_installed = command_exists(
+        "docker"
+    )
 
     return {
         "python": {
             "installed": True,
-            "version": (
-                f"{sys.version_info.major}."
-                f"{sys.version_info.minor}."
-                f"{sys.version_info.micro}"
-            )
+            "version": platform.python_version()
         },
 
         "docker": {
-            "installed": command_exists("docker"),
-            "running": docker_running()
-        },
-
-        "git": {
-            "installed": command_exists("git")
-        },
-
-        "bash": {
-            "installed": command_exists("bash")
-        },
-
-        "freerdp": {
-            "installed": freerdp is not None,
-            "client": freerdp
+            "installed": docker_installed,
+            "running": (
+                docker_running()
+                if docker_installed
+                else False
+            )
         },
 
         "docker_buildx": {
             "installed": (
-                subprocess.run(
-                    ["docker", "buildx", "version"],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    check=False
-                ).returncode == 0
-                if command_exists("docker")
+                docker_buildx_available()
+                if docker_installed
                 else False
             )
+        },
+
+        "git": {
+            "installed": command_exists(
+                "git"
+            )
+        },
+
+        "bash": {
+            "installed": command_exists(
+                "bash"
+            )
+        },
+
+        "freerdp": {
+            "installed": (
+                freerdp_client is not None
+            ),
+            "client": freerdp_client
         }
     }
 
 
 def missing_dependencies() -> list[str]:
-    """
-    Devuelve las dependencias faltantes.
-    """
-
     status = check_dependencies()
 
     missing = []
 
-    if not status["docker"]["installed"]:
-        missing.append("docker")
+    for dependency in [
+        "python",
+        "docker",
+        "docker_buildx",
+        "git",
+        "bash",
+        "freerdp",
+    ]:
 
-    if not status["docker_buildx"]["installed"]:
-        missing.append("docker_buildx")
+        if not status[
+            dependency
+        ]["installed"]:
 
-    if not status["git"]["installed"]:
-        missing.append("git")
-
-    if not status["bash"]["installed"]:
-        missing.append("bash")
-
-    if not status["freerdp"]["installed"]:
-        missing.append("freerdp")
+            missing.append(
+                dependency
+            )
 
     return missing
 
 
+# ============================================================
+# Mapeo dependencia -> paquete
+# ============================================================
+
+PACKAGE_MAP = {
+
+    # --------------------------------------------------------
+    # Arch Linux / CachyOS / Manjaro
+    # --------------------------------------------------------
+
+    "pacman": {
+        "python": "python",
+        "docker": "docker",
+        "docker_buildx": "docker-buildx",
+        "git": "git",
+        "bash": "bash",
+        "freerdp": "freerdp",
+    },
+
+    # --------------------------------------------------------
+    # Debian / Ubuntu
+    # --------------------------------------------------------
+
+    "apt": {
+        "python": "python3",
+        "docker": "docker.io",
+        "docker_buildx": "docker-buildx",
+        "git": "git",
+        "bash": "bash",
+        "freerdp": "freerdp3-x11",
+    },
+
+    # --------------------------------------------------------
+    # Fedora
+    # --------------------------------------------------------
+
+    "dnf": {
+        "python": "python3",
+        "docker": "moby-engine",
+        "docker_buildx": "docker-buildx",
+        "git": "git",
+        "bash": "bash",
+        "freerdp": "freerdp",
+    },
+}
+
+
 def get_installation_plan() -> dict:
-    """
-    Devuelve qué paquetes habría que instalar
-    según el gestor de paquetes detectado.
-
-    Por ahora la instalación automática está
-    implementada únicamente para Arch/CachyOS.
-    """
-
     manager = detect_package_manager()
 
     missing = missing_dependencies()
 
-    packages = []
-
-    if manager == "pacman":
-
-        package_map = {
-            "docker": "docker",
-            "docker_buildx": "docker-buildx",
-            "git": "git",
-            "bash": "bash",
-            "freerdp": "freerdp"
+    if not manager:
+        return {
+            "manager": None,
+            "missing": missing,
+            "packages": []
         }
 
-        for dependency in missing:
-            package = package_map.get(dependency)
+    mapping = PACKAGE_MAP.get(
+        manager,
+        {}
+    )
 
-            if package and package not in packages:
-                packages.append(package)
+    packages = []
+
+    for dependency in missing:
+
+        package = mapping.get(
+            dependency
+        )
+
+        if (
+            package
+            and package not in packages
+        ):
+            packages.append(
+                package
+            )
 
     return {
         "manager": manager,
@@ -243,90 +422,152 @@ def get_installation_plan() -> dict:
     }
 
 
+# ============================================================
+# Instalación automática
+# ============================================================
+
 def install_missing_dependencies() -> bool:
-    """
-    Instala automáticamente las dependencias
-    faltantes.
-
-    Actualmente soportado:
-    - Arch Linux
-    - CachyOS
-    - Manjaro
-    - otros sistemas ID_LIKE=arch
-    """
-
     plan = get_installation_plan()
 
-    manager = plan["manager"]
-    packages = plan["packages"]
-    missing = plan["missing"]
+    manager = plan[
+        "manager"
+    ]
+
+    packages = plan[
+        "packages"
+    ]
+
+    missing = plan[
+        "missing"
+    ]
 
     if not missing:
         return True
 
-    if manager != "pacman":
+    if not manager:
         print(
-            "La instalación automática todavía "
-            "no está disponible para este sistema."
+            "ERROR: No se pudo detectar "
+            "un gestor de paquetes compatible."
         )
-
         return False
 
     if not packages:
-        return True
+        print(
+            "ERROR: No existe un plan de "
+            "instalación para las dependencias "
+            "faltantes."
+        )
+        return False
 
     print()
-    print("Paquetes que se instalarán:")
-    print()
-
-    for package in packages:
-        print(f"  - {package}")
-
-    print()
-
-    command = [
-        "sudo",
-        "pacman",
-        "-S",
-        "--needed",
-        "--noconfirm",
-        *packages
-    ]
-
-    result = subprocess.run(
-        command,
-        check=False
+    print(
+        "Paquetes que se instalarán:"
     )
 
-    return result.returncode == 0
+    for package in packages:
+        print(
+            f"  - {package}"
+        )
 
+    print()
+
+    # --------------------------------------------------------
+    # pacman
+    # --------------------------------------------------------
+
+    if manager == "pacman":
+
+        return run_command(
+            [
+                "sudo",
+                "pacman",
+                "-S",
+                "--needed",
+                "--noconfirm",
+                *packages
+            ]
+        )
+
+    # --------------------------------------------------------
+    # apt
+    # --------------------------------------------------------
+
+    if manager == "apt":
+
+        apt_command = (
+            "apt-get"
+            if command_exists("apt-get")
+            else "apt"
+        )
+
+        print(
+            "Actualizando índices de APT..."
+        )
+
+        if not run_command(
+            [
+                "sudo",
+                apt_command,
+                "update"
+            ]
+        ):
+            return False
+
+        print()
+        print(
+            "Instalando dependencias..."
+        )
+
+        return run_command(
+            [
+                "sudo",
+                apt_command,
+                "install",
+                "-y",
+                *packages
+            ]
+        )
+
+    # --------------------------------------------------------
+    # dnf
+    # --------------------------------------------------------
+
+    if manager == "dnf":
+
+        return run_command(
+            [
+                "sudo",
+                "dnf",
+                "install",
+                "-y",
+                *packages
+            ]
+        )
+
+    return False
+
+
+# ============================================================
+# Servicio Docker
+# ============================================================
 
 def start_docker_service() -> bool:
     """
-    Intenta habilitar e iniciar Docker mediante systemd.
+    Inicia Docker y lo habilita para
+    futuros arranques.
     """
 
-    if not command_exists("docker"):
+    if not command_exists(
+        "systemctl"
+    ):
         return False
 
-    if docker_running():
-        return True
-
-    if not command_exists("systemctl"):
-        return False
-
-    result = subprocess.run(
+    return run_command(
         [
             "sudo",
             "systemctl",
             "enable",
             "--now",
             "docker.service"
-        ],
-        check=False
+        ]
     )
-
-    if result.returncode != 0:
-        return False
-
-    return docker_running()
