@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import time
+from pathlib import Path
+
+
+# Al estar enlazado desde ~/.local/bin,
+# resolve() nos devuelve la ubicación real dentro del repo.
+SCRIPT_FILE = Path(__file__).resolve()
+REPO_ROOT = SCRIPT_FILE.parent.parent
+
+CATALOG_FILE = REPO_ROOT / "catalog.json"
+
+sys.path.insert(0, str(REPO_ROOT))
+
+from manager.containers import (
+    container_exists,
+    container_running,
+    get_host_port,
+    start_container,
+)
+from manager.dependencies import detect_freerdp
+
+
+def error(message: str) -> None:
+    print(f"ERROR: {message}", file=sys.stderr)
+    sys.exit(1)
+
+
+def load_catalog() -> dict:
+    try:
+        with CATALOG_FILE.open(
+            "r",
+            encoding="utf-8"
+        ) as file:
+            return json.load(file)
+
+    except (OSError, json.JSONDecodeError) as exc:
+        error(
+            f"No se pudo leer catalog.json: {exc}"
+        )
+
+
+def get_desktop(
+    catalog: dict,
+    distro_key: str,
+    desktop_key: str
+) -> dict:
+
+    try:
+        distro = catalog["distros"][distro_key]
+    except KeyError:
+        error(
+            f"Distribución desconocida: {distro_key}"
+        )
+
+    try:
+        desktop = distro["desktops"][desktop_key]
+    except KeyError:
+        error(
+            f"Escritorio desconocido: "
+            f"{distro_key}/{desktop_key}"
+        )
+
+    if not desktop.get("available", False):
+        error(
+            f"{distro['name']} + "
+            f"{desktop['name']} todavía "
+            f"no está disponible."
+        )
+
+    return desktop
+
+
+def wait_for_xrdp(
+    container_name: str,
+    attempts: int = 30
+) -> bool:
+
+    for _ in range(attempts):
+
+        xrdp = subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "pgrep",
+                "-x",
+                "xrdp"
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False
+        )
+
+        sesman = subprocess.run(
+            [
+                "docker",
+                "exec",
+                container_name,
+                "pgrep",
+                "-x",
+                "xrdp-sesman"
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False
+        )
+
+        if (
+            xrdp.returncode == 0
+            and sesman.returncode == 0
+        ):
+            return True
+
+        time.sleep(1)
+
+    return False
+
+
+def launch_rdp(
+    *,
+    container_name: str,
+    container_port: int,
+    user: str
+) -> None:
+
+    client = detect_freerdp()
+
+    if client is None:
+        error(
+            "No se encontró FreeRDP."
+        )
+
+    host_port = get_host_port(
+        container_name,
+        container_port
+    )
+
+    if host_port is None:
+        error(
+            "No se pudo determinar el "
+            "puerto RDP del contenedor."
+        )
+
+    command = [
+    client,
+    f"/v:127.0.0.1:{host_port}",
+    f"/u:{user}",
+    "/p:1234",
+    "/gfx:RFX",
+    "/gdi:sw",
+    "/dynamic-resolution",
+    "/clipboard",
+    "/sound",
+    "/cert:ignore"
+	]
+
+    subprocess.run(
+        command,
+        check=False
+    )
+
+
+def main() -> None:
+
+    if len(sys.argv) != 3:
+        error(
+            "Uso: linux-desktop-launcher "
+            "<distro> <desktop>"
+        )
+
+    distro_key = sys.argv[1]
+    desktop_key = sys.argv[2]
+
+    catalog = load_catalog()
+
+    desktop = get_desktop(
+        catalog,
+        distro_key,
+        desktop_key
+    )
+
+    container = desktop["container"]
+
+    container_name = container["name"]
+    container_port = container["port"]
+
+    user = desktop["rdp"]["user"]
+
+    if not container_exists(container_name):
+        error(
+            f"{container_name} no está instalado. "
+            "Instálalo primero desde "
+            "Linux Desktop Containers."
+        )
+
+    if not container_running(container_name):
+
+        print(
+            f"Iniciando {container_name}..."
+        )
+
+        if not start_container(container_name):
+            error(
+                "No se pudo iniciar el contenedor."
+            )
+
+    print("Esperando XRDP...")
+
+    if not wait_for_xrdp(container_name):
+        error(
+            "XRDP no respondió a tiempo."
+        )
+
+    time.sleep(1)
+
+    launch_rdp(
+        container_name=container_name,
+        container_port=container_port,
+        user=user
+    )
+
+
+if __name__ == "__main__":
+    try:
+        main()
+
+    except KeyboardInterrupt:
+        print("\nCancelado.")

@@ -1,137 +1,879 @@
 #!/usr/bin/env python3
 
-import json
+from __future__ import annotations
+
 import subprocess
-import sys
 from pathlib import Path
+
+from manager.catalog import (
+    CatalogError,
+    get_desktop,
+    get_distro,
+    get_distros,
+)
+from manager.containers import (
+    get_status,
+    stop_container,
+)
+from manager.dependencies import check_dependencies
+from manager.installer import (
+    InstallationError,
+    get_installation_status,
+    install_desktop,
+    recreate_desktop,
+    uninstall_desktop,
+    update_desktop,
+)
+from manager.shortcuts import create_shortcut
 
 
 REPO_ROOT = Path(__file__).resolve().parent
-CATALOG_FILE = REPO_ROOT / "catalog.json"
+DESKTOP_LAUNCHER = REPO_ROOT / "launchers" / "desktop-launcher"
 
 
-def clear():
+def clear() -> None:
     print("\033[2J\033[H", end="")
 
 
-def load_catalog():
-    try:
-        with CATALOG_FILE.open("r", encoding="utf-8") as file:
-            return json.load(file)
-    except (OSError, json.JSONDecodeError) as error:
-        print(f"Error leyendo catalog.json: {error}")
-        sys.exit(1)
+def pause() -> None:
+    input("\nPresiona Enter para continuar...")
 
 
-def choose(title, options):
-    while True:
-        clear()
+def header(title: str | None = None) -> None:
+    clear()
 
-        print("=" * 42)
-        print("       Linux Desktop Containers")
-        print("=" * 42)
+    print("╔══════════════════════════════════════════╗")
+    print("║        Linux Desktop Containers          ║")
+    print("╚══════════════════════════════════════════╝")
+
+    if title:
         print()
         print(title)
-        print()
 
-        for index, option in enumerate(options, start=1):
-            print(f"  {index}) {option}")
+    print()
 
-        print()
-        print("  0) Volver / Salir")
-        print()
 
-        choice = input("> ").strip()
+def choose(
+    options: list[str],
+    back_text: str = "Volver"
+) -> int | None:
 
-        if choice == "0":
+    for index, option in enumerate(
+        options,
+        start=1
+    ):
+        print(f"  {index}) {option}")
+
+    print(f"  0) {back_text}")
+    print()
+
+    while True:
+        value = input("> ").strip()
+
+        if value == "0":
             return None
 
-        if choice.isdigit():
-            index = int(choice) - 1
+        if value.isdigit():
+            index = int(value) - 1
 
             if 0 <= index < len(options):
                 return index
 
+        print("Opción inválida.")
 
-def main():
-    catalog = load_catalog()
+
+def status_label(
+    distro_key: str,
+    desktop_key: str
+) -> str:
+
+    installation = get_installation_status(
+        distro_key,
+        desktop_key
+    )
+
+    if installation == "unavailable":
+        return "🚧 Próximamente"
+
+    if installation == "not-installed":
+        return "📥 No instalado"
+
+    if installation == "image-only":
+        return "📦 Imagen descargada"
+
+    desktop = get_desktop(
+        distro_key,
+        desktop_key
+    )
+
+    container_name = desktop[
+        "container"
+    ]["name"]
+
+    status = get_status(
+        container_name
+    )
+
+    if status == "running":
+        return "🟢 Ejecutándose"
+
+    return "🟡 Instalado"
+
+
+def dependencies_menu() -> None:
+    header("Dependencias")
+
+    status = check_dependencies()
+
+    print(
+        f"Python         "
+        f"{'✅' if status['python']['installed'] else '❌'} "
+        f"{status['python']['version']}"
+    )
+
+    print(
+        f"Docker         "
+        f"{'✅' if status['docker']['installed'] else '❌'} "
+        f"{'(activo)' if status['docker']['running'] else '(detenido)'}"
+    )
+
+    print(
+        f"Docker Buildx  "
+        f"{'✅' if status['docker_buildx']['installed'] else '❌'}"
+    )
+
+    print(
+        f"Git            "
+        f"{'✅' if status['git']['installed'] else '❌'}"
+    )
+
+    print(
+        f"Bash           "
+        f"{'✅' if status['bash']['installed'] else '❌'}"
+    )
+
+    print(
+        f"FreeRDP        "
+        f"{'✅' if status['freerdp']['installed'] else '❌'} "
+        f"{status['freerdp']['client'] or ''}"
+    )
+
+    pause()
+
+
+def launch_desktop(
+    distro_key: str,
+    desktop_key: str
+) -> None:
+
+    if not DESKTOP_LAUNCHER.is_file():
+        print(
+            "ERROR: No existe desktop-launcher."
+        )
+        pause()
+        return
+
+    subprocess.run(
+        [
+            str(DESKTOP_LAUNCHER),
+            distro_key,
+            desktop_key
+        ],
+        check=False
+    )
+
+
+def installed_desktop_menu(
+    distro_key: str,
+    desktop_key: str
+) -> None:
+
+    distro = get_distro(
+        distro_key
+    )
+
+    desktop = get_desktop(
+        distro_key,
+        desktop_key
+    )
+
+    container_name = desktop[
+        "container"
+    ]["name"]
 
     while True:
-        distro_keys = list(catalog.keys())
-        distro_names = [catalog[key]["name"] for key in distro_keys]
 
-        distro_index = choose(
-            "Selecciona una distribución:",
-            distro_names
+        container_status = get_status(
+            container_name
         )
 
-        if distro_index is None:
-            break
-
-        distro_key = distro_keys[distro_index]
-        distro = catalog[distro_key]
-
-        desktop_keys = list(distro["desktops"].keys())
-
-        desktop_labels = []
-
-        for key in desktop_keys:
-            desktop = distro["desktops"][key]
-
-            status = (
-                "Disponible"
-                if desktop.get("available", False)
-                else "Próximamente"
-            )
-
-            desktop_labels.append(
-                f'{desktop["name"]} [{status}]'
-            )
-
-        desktop_index = choose(
-            f'{distro["name"]} - Selecciona escritorio:',
-            desktop_labels
+        header(
+            f"{distro['name']} + "
+            f"{desktop['name']}"
         )
 
-        if desktop_index is None:
-            continue
+        if container_status == "running":
+            print("Estado: 🟢 Ejecutándose")
+        else:
+            print("Estado: 🟡 Detenido")
 
-        desktop_key = desktop_keys[desktop_index]
-        desktop = distro["desktops"][desktop_key]
-
-        if not desktop.get("available", False):
-            print()
-            print(
-                f'{distro["name"]} + {desktop["name"]} '
-                "todavía no está disponible."
-            )
-            input("\nEnter para continuar...")
-            continue
-
-        launcher = REPO_ROOT / desktop["launcher"]
-
-        if not launcher.is_file():
-            print()
-            print(f"No se encontró el launcher:")
-            print(launcher)
-            input("\nEnter para continuar...")
-            continue
-
-        clear()
-
-        print(
-            f'Iniciando {distro["name"]} + '
-            f'{desktop["name"]}...'
-        )
         print()
 
-        subprocess.run([str(launcher)])
+        options = [
+            "▶ Iniciar / Abrir escritorio",
+            "⏹ Detener",
+            "📊 Ver estado",
+            "🔄 Actualizar",
+            "♻ Recrear contenedor",
+            "🗑 Desinstalar",
+            "🖥 Recrear acceso directo",
+        ]
 
-        input("\nEnter para volver al menú...")
+        choice = choose(options)
+
+        if choice is None:
+            return
+
+        # ----------------------------------------------------
+        # Iniciar / abrir
+        # ----------------------------------------------------
+
+        if choice == 0:
+
+            launch_desktop(
+                distro_key,
+                desktop_key
+            )
+
+        # ----------------------------------------------------
+        # Detener
+        # ----------------------------------------------------
+
+        elif choice == 1:
+
+            if stop_container(
+                container_name
+            ):
+                print(
+                    "\n✓ Contenedor detenido."
+                )
+            else:
+                print(
+                    "\nERROR: No se pudo detener."
+                )
+
+            pause()
+
+        # ----------------------------------------------------
+        # Estado
+        # ----------------------------------------------------
+
+        elif choice == 2:
+
+            print()
+            print(
+                f"Contenedor: {container_name}"
+            )
+            print(
+                f"Estado: "
+                f"{get_status(container_name)}"
+            )
+
+            pause()
+
+        # ----------------------------------------------------
+        # Actualizar
+        # ----------------------------------------------------
+
+        elif choice == 3:
+
+            header(
+                f"Actualizar "
+                f"{distro['name']} + "
+                f"{desktop['name']}"
+            )
+
+            print(
+                "Buscando una imagen más reciente..."
+            )
+            print()
+
+            try:
+
+                result = update_desktop(
+                    distro_key,
+                    desktop_key
+                )
+
+                if result["changed"]:
+
+                    print(
+                        "✓ Hay una nueva imagen."
+                    )
+
+                    if result["recreated"]:
+                        print(
+                            "✓ Contenedor recreado."
+                        )
+
+                else:
+
+                    print(
+                        "✓ Ya tienes la versión más reciente."
+                    )
+
+            except InstallationError as error:
+
+                print(
+                    f"ERROR: {error}"
+                )
+
+            pause()
+
+        # ----------------------------------------------------
+        # Recrear
+        # ----------------------------------------------------
+
+        elif choice == 4:
+
+            header(
+                f"Recrear "
+                f"{distro['name']} + "
+                f"{desktop['name']}"
+            )
+
+            print(
+                "⚠ Esta acción elimina y vuelve "
+                "a crear el contenedor."
+            )
+
+            print()
+            print(
+                "Mientras no implementemos "
+                "persistencia, los cambios hechos "
+                "dentro del contenedor se perderán."
+            )
+
+            print()
+
+            confirmation = input(
+                "¿Continuar? [s/N]: "
+            ).strip().lower()
+
+            if confirmation not in {
+                "s",
+                "si",
+                "sí",
+                "y",
+                "yes"
+            }:
+                print(
+                    "\nOperación cancelada."
+                )
+                pause()
+                continue
+
+            try:
+
+                recreate_desktop(
+                    distro_key,
+                    desktop_key
+                )
+
+                print()
+                print(
+                    "✓ Contenedor recreado correctamente."
+                )
+
+            except InstallationError as error:
+
+                print()
+                print(
+                    f"ERROR: {error}"
+                )
+
+            pause()
+
+        # ----------------------------------------------------
+        # Desinstalar
+        # ----------------------------------------------------
+
+        elif choice == 5:
+
+            header(
+                f"Desinstalar "
+                f"{distro['name']} + "
+                f"{desktop['name']}"
+            )
+
+            print(
+                "Se eliminará:"
+            )
+            print()
+            print(
+                "  - contenedor"
+            )
+            print(
+                "  - acceso directo"
+            )
+            print()
+
+            print(
+                "La imagen Docker puede conservarse "
+                "para reinstalar más rápido."
+            )
+
+            print()
+
+            confirmation = input(
+                "¿Desinstalar? [s/N]: "
+            ).strip().lower()
+
+            if confirmation not in {
+                "s",
+                "si",
+                "sí",
+                "y",
+                "yes"
+            }:
+                print(
+                    "\nOperación cancelada."
+                )
+                pause()
+                continue
+
+            print()
+
+            remove_image_answer = input(
+                "¿Eliminar también la imagen Docker? "
+                "[s/N]: "
+            ).strip().lower()
+
+            remove_image_too = (
+                remove_image_answer
+                in {
+                    "s",
+                    "si",
+                    "sí",
+                    "y",
+                    "yes"
+                }
+            )
+
+            try:
+
+                uninstall_desktop(
+                    distro_key,
+                    desktop_key,
+                    remove_image_too=remove_image_too
+                )
+
+                print()
+                print(
+                    "✓ Escritorio desinstalado."
+                )
+
+                pause()
+
+                return
+
+            except InstallationError as error:
+
+                print()
+                print(
+                    f"ERROR: {error}"
+                )
+
+                pause()
+
+        # ----------------------------------------------------
+        # Recrear acceso directo
+        # ----------------------------------------------------
+
+        elif choice == 6:
+
+            shortcut = desktop.get(
+                "shortcut",
+                {}
+            )
+
+            name = shortcut.get(
+                "name",
+                f"{distro['name']} "
+                f"{desktop['name']}"
+            )
+
+            path = create_shortcut(
+                distro_key=distro_key,
+                desktop_key=desktop_key,
+                name=name
+            )
+
+            print()
+            print(
+                "✓ Acceso directo creado:"
+            )
+            print(
+                path
+            )
+
+            pause()
+
+
+def desktop_menu(
+    distro_key: str,
+    desktop_key: str
+) -> None:
+
+    distro = get_distro(
+        distro_key
+    )
+
+    desktop = get_desktop(
+        distro_key,
+        desktop_key
+    )
+
+    installation = get_installation_status(
+        distro_key,
+        desktop_key
+    )
+
+    if installation == "unavailable":
+
+        header(
+            f"{distro['name']} + "
+            f"{desktop['name']}"
+        )
+
+        print(
+            "🚧 Esta combinación todavía "
+            "no está disponible."
+        )
+
+        pause()
+
+        return
+
+    if installation == "installed":
+
+        installed_desktop_menu(
+            distro_key,
+            desktop_key
+        )
+
+        return
+
+    header(
+        f"{distro['name']} + "
+        f"{desktop['name']}"
+    )
+
+    if installation == "image-only":
+        print(
+            "Estado: 📦 Imagen descargada"
+        )
+    else:
+        print(
+            "Estado: 📥 No instalado"
+        )
+
+    print()
+
+    choice = choose(
+        [
+            "📥 Instalar",
+            "ℹ Información"
+        ]
+    )
+
+    if choice is None:
+        return
+
+    if choice == 0:
+
+        header(
+            f"Instalando "
+            f"{distro['name']} + "
+            f"{desktop['name']}"
+        )
+
+        try:
+
+            install_desktop(
+                distro_key,
+                desktop_key
+            )
+
+            pause()
+
+        except (
+            InstallationError,
+            CatalogError
+        ) as error:
+
+            print()
+            print(
+                f"ERROR: {error}"
+            )
+
+            pause()
+
+    elif choice == 1:
+
+        print()
+        print(
+            f"Distribución: "
+            f"{distro['name']}"
+        )
+
+        print(
+            f"Escritorio: "
+            f"{desktop['name']}"
+        )
+
+        print(
+            f"Estado: "
+            f"{status_label(distro_key, desktop_key)}"
+        )
+
+        if "image" in desktop:
+
+            print(
+                f"Imagen: "
+                f"{desktop['image']['remote']}"
+            )
+
+        pause()
+
+
+def distro_menu(
+    distro_key: str
+) -> None:
+
+    distro = get_distro(
+        distro_key
+    )
+
+    while True:
+
+        desktop_keys = list(
+            distro[
+                "desktops"
+            ].keys()
+        )
+
+        options = []
+
+        for desktop_key in desktop_keys:
+
+            desktop = distro[
+                "desktops"
+            ][desktop_key]
+
+            options.append(
+                f"{desktop['name']}  "
+                f"{status_label(distro_key, desktop_key)}"
+            )
+
+        header(
+            distro["name"]
+        )
+
+        choice = choose(
+            options
+        )
+
+        if choice is None:
+            return
+
+        desktop_key = desktop_keys[
+            choice
+        ]
+
+        desktop_menu(
+            distro_key,
+            desktop_key
+        )
+
+
+def distributions_menu() -> None:
+
+    while True:
+
+        distros = get_distros()
+
+        distro_keys = list(
+            distros.keys()
+        )
+
+        options = [
+            distros[key]["name"]
+            for key in distro_keys
+        ]
+
+        header(
+            "Distribuciones"
+        )
+
+        choice = choose(
+            options
+        )
+
+        if choice is None:
+            return
+
+        distro_menu(
+            distro_keys[choice]
+        )
+
+
+def installed_menu() -> None:
+
+    distros = get_distros()
+
+    installed = []
+
+    for distro_key, distro in distros.items():
+
+        for desktop_key, desktop in distro[
+            "desktops"
+        ].items():
+
+            status = get_installation_status(
+                distro_key,
+                desktop_key
+            )
+
+            if status == "installed":
+
+                installed.append(
+                    (
+                        distro_key,
+                        desktop_key,
+                        f"{distro['name']} + "
+                        f"{desktop['name']}  "
+                        f"{status_label(distro_key, desktop_key)}"
+                    )
+                )
+
+    header(
+        "Escritorios instalados"
+    )
+
+    if not installed:
+
+        print(
+            "No hay escritorios instalados todavía."
+        )
+
+        pause()
+
+        return
+
+    options = [
+        item[2]
+        for item in installed
+    ]
+
+    choice = choose(
+        options
+    )
+
+    if choice is None:
+        return
+
+    distro_key, desktop_key, _ = installed[
+        choice
+    ]
+
+    installed_desktop_menu(
+        distro_key,
+        desktop_key
+    )
+
+
+def main() -> None:
+
+    while True:
+
+        header()
+
+        options = [
+            "🐧 Distribuciones",
+            "📦 Escritorios instalados",
+            "🧰 Dependencias",
+            "🔄 Actualizar administrador",
+            "⚙ Configuración",
+        ]
+
+        choice = choose(
+            options,
+            back_text="Salir"
+        )
+
+        if choice is None:
+
+            print()
+            print(
+                "Hasta luego."
+            )
+
+            return
+
+        if choice == 0:
+
+            distributions_menu()
+
+        elif choice == 1:
+
+            installed_menu()
+
+        elif choice == 2:
+
+            dependencies_menu()
+
+        elif choice == 3:
+
+            header(
+                "Actualizar administrador"
+            )
+
+            print(
+                "La actualización del repositorio "
+                "se implementará en updater.py."
+            )
+
+            pause()
+
+        elif choice == 4:
+
+            header(
+                "Configuración"
+            )
+
+            print(
+                "El panel de configuración "
+                "se implementará próximamente."
+            )
+
+            pause()
 
 
 if __name__ == "__main__":
+
     try:
+
         main()
+
     except KeyboardInterrupt:
-        print("\nSaliendo...")
+
+        print(
+            "\nSaliendo..."
+        )
+
+    except CatalogError as error:
+
+        print(
+            f"\nERROR DE CATÁLOGO: {error}"
+        )

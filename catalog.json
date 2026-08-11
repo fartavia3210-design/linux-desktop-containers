@@ -1,95 +1,127 @@
 {
-  "arch": {
-    "name": "Arch Linux",
-    "desktops": {
-      "xfce": {
-        "name": "XFCE",
-        "available": true,
-        "image": "arch-xfce:1.0.0",
-        "container": "arch-xfce",
-        "launcher": "distros/arch/xfce/launch.sh"
-      },
-      "kde": {
-        "name": "KDE Plasma",
-        "available": false
-      },
-      "gnome": {
-        "name": "GNOME",
-        "available": false
-      }
-    }
+  "schema_version": 2,
+
+  "project": {
+    "name": "Linux Desktop Containers",
+    "registry": "ghcr.io/fartavia3210-design/linux-desktop-containers"
   },
 
-  "debian": {
-    "name": "Debian",
-    "desktops": {
-      "xfce": {
-        "name": "XFCE",
-        "available": false
-      },
-      "kde": {
-        "name": "KDE Plasma",
-        "available": false
-      },
-      "gnome": {
-        "name": "GNOME",
-        "available": false
-      }
-    }
-  },
+  "distros": {
+    "arch": {
+      "name": "Arch Linux",
+      "desktops": {
+        "xfce": {
+          "name": "XFCE",
+          "available": true,
 
-  "ubuntu": {
-    "name": "Ubuntu",
-    "desktops": {
-      "xfce": {
-        "name": "XFCE",
-        "available": false
-      },
-      "kde": {
-        "name": "KDE Plasma",
-        "available": false
-      },
-      "gnome": {
-        "name": "GNOME",
-        "available": false
-      }
-    }
-  },
+          "image": {
+            "remote": "ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest",
+            "build_context": "distros/arch/xfce"
+          },
 
-  "fedora": {
-    "name": "Fedora",
-    "desktops": {
-      "xfce": {
-        "name": "XFCE",
-        "available": false
-      },
-      "kde": {
-        "name": "KDE Plasma",
-        "available": false
-      },
-      "gnome": {
-        "name": "GNOME",
-        "available": false
-      }
-    }
-  },
+          "container": {
+            "name": "ldc-arch-xfce",
+            "port": 3389,
+            "host_port": "auto",
+            "shm_size": "1g"
+          },
 
-  "xubuntu": {
-    "name": "Xubuntu",
-    "desktops": {
-      "xfce": {
-        "name": "XFCE",
-        "available": false
-      }
-    }
-  },
+          "rdp": {
+            "user": "arch"
+          },
 
-  "lubuntu": {
-    "name": "Lubuntu",
-    "desktops": {
-      "lxqt": {
-        "name": "LXQt",
-        "available": false
+          "security": {
+            "seccomp": "common/security/seccomp-brave.json"
+          },
+
+          "shortcut": {
+            "name": "Arch Linux XFCE"
+          }
+        },
+
+        "kde": {
+          "name": "KDE Plasma",
+          "available": false
+        },
+
+        "gnome": {
+          "name": "GNOME",
+          "available": false
+        }
+      }
+    },
+
+    "debian": {
+      "name": "Debian",
+      "desktops": {
+        "xfce": {
+          "name": "XFCE",
+          "available": false
+        },
+        "kde": {
+          "name": "KDE Plasma",
+          "available": false
+        },
+        "gnome": {
+          "name": "GNOME",
+          "available": false
+        }
+      }
+    },
+
+    "ubuntu": {
+      "name": "Ubuntu",
+      "desktops": {
+        "xfce": {
+          "name": "XFCE",
+          "available": false
+        },
+        "kde": {
+          "name": "KDE Plasma",
+          "available": false
+        },
+        "gnome": {
+          "name": "GNOME",
+          "available": false
+        }
+      }
+    },
+
+    "fedora": {
+      "name": "Fedora",
+      "desktops": {
+        "xfce": {
+          "name": "XFCE",
+          "available": false
+        },
+        "kde": {
+          "name": "KDE Plasma",
+          "available": false
+        },
+        "gnome": {
+          "name": "GNOME",
+          "available": false
+        }
+      }
+    },
+
+    "xubuntu": {
+      "name": "Xubuntu",
+      "desktops": {
+        "xfce": {
+          "name": "XFCE",
+          "available": false
+        }
+      }
+    },
+
+    "lubuntu": {
+      "name": "Lubuntu",
+      "desktops": {
+        "lxqt": {
+          "name": "LXQt",
+          "available": false
+        }
       }
     }
   }
