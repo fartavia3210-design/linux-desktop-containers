@@ -3,6 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+
 def apparmor_enabled() -> bool:
     """
     Comprueba si AppArmor está activo
@@ -22,6 +23,30 @@ def apparmor_enabled() -> bool:
         ).strip()
 
         return value.upper().startswith("Y")
+
+    except OSError:
+        return False
+
+
+def selinux_enforcing() -> bool:
+    """
+    Comprueba si SELinux está activo
+    y en modo Enforcing en el host.
+    """
+
+    path = Path(
+        "/sys/fs/selinux/enforce"
+    )
+
+    if not path.is_file():
+        return False
+
+    try:
+        value = path.read_text(
+            encoding="utf-8"
+        ).strip()
+
+        return value == "1"
 
     except OSError:
         return False
@@ -186,8 +211,16 @@ def create_container(
         apparmor_profile
             Perfil AppArmor opcional.
 
-            Ejemplo:
-                unconfined
+        SELinux
+            Si el host utiliza SELinux en modo
+            Enforcing, se desactiva únicamente
+            el etiquetado SELinux del contenedor
+            mediante:
+
+                --security-opt label=disable
+
+            Esto no desactiva SELinux globalmente
+            en el host.
 
     environment:
         Variables de entorno adicionales.
@@ -235,10 +268,32 @@ def create_container(
         )
 
     # --------------------------------------------------------
-    # AppArmor
+    # Seguridad del host
+    # --------------------------------------------------------
+    #
+    # SELinux Enforcing:
+    #
+    #     --security-opt label=disable
+    #
+    # AppArmor:
+    #
+    #     --security-opt apparmor=<perfil>
+    #
+    # Sin SELinux ni AppArmor:
+    #
+    #     no se añade ninguna opción LSM adicional.
     # --------------------------------------------------------
 
-    if apparmor_profile and apparmor_enabled():
+    if selinux_enforcing():
+
+        command.extend(
+            [
+                "--security-opt",
+                "label=disable"
+            ]
+        )
+
+    elif apparmor_profile and apparmor_enabled():
 
         command.extend(
             [
