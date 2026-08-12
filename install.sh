@@ -205,6 +205,42 @@ raise SystemExit(0 if start_docker_service() else 1)
 fi
 
 
+# ============================================================
+# Permisos de Docker
+# ============================================================
+
+DOCKER_SESSION_RESTART_REQUIRED="no"
+
+if command -v docker >/dev/null 2>&1; then
+
+    if ! docker info >/dev/null 2>&1 && sudo docker info >/dev/null 2>&1; then
+
+        echo
+        echo "Docker está activo, pero el usuario actual no tiene acceso sin sudo."
+
+        if ! getent group docker >/dev/null 2>&1; then
+            echo "Creando grupo docker..."
+            sudo groupadd docker
+        fi
+
+        if ! id -nG "$USER" | tr ' ' '\n' | grep -qx docker; then
+            echo "Agregando usuario '$USER' al grupo docker..."
+            sudo usermod -aG docker "$USER"
+        fi
+
+        DOCKER_SESSION_RESTART_REQUIRED="yes"
+
+        echo "Usuario agregado al grupo docker: ✅"
+        echo
+        echo "IMPORTANTE:"
+        echo "Los nuevos permisos de Docker se aplicarán al cerrar sesión"
+        echo "y volver a entrar, o después de reiniciar el sistema."
+        echo
+    fi
+
+fi
+
+
 
 # ============================================================
 # AppArmor
@@ -373,18 +409,32 @@ echo
 echo "Comprobando instalación..."
 echo
 
+export DOCKER_SESSION_RESTART_REQUIRED
+
 python3 - <<'PY'
+import os
+
 from manager.dependencies import check_dependencies
 
 status = check_dependencies()
+
+docker_session_restart_required = (
+    os.environ.get("DOCKER_SESSION_RESTART_REQUIRED", "no") == "yes"
+)
 
 print(
     f"Python         ✅ {status['python']['version']}"
 )
 
+if status["docker"]["running"]:
+    docker_text = "✅ activo"
+elif docker_session_restart_required:
+    docker_text = "✅ activo (nueva sesión requerida)"
+else:
+    docker_text = "❌"
+
 print(
-    f"Docker         "
-    f"{'✅ activo' if status['docker']['running'] else '❌'}"
+    f"Docker         {docker_text}"
 )
 
 print(
