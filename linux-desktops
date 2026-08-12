@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
+import grp
+import os
+import pwd
+import shlex
+import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from manager.catalog import (
@@ -29,6 +35,85 @@ from manager.shortcuts import create_shortcut
 
 REPO_ROOT = Path(__file__).resolve().parent
 DESKTOP_LAUNCHER = REPO_ROOT / "launchers" / "desktop-launcher"
+
+
+def ensure_docker_group_session() -> None:
+
+    if shutil.which("docker") is None:
+        return
+
+    if shutil.which("sg") is None:
+        return
+
+    docker_check = subprocess.run(
+        ["docker", "info"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False
+    )
+
+    if docker_check.returncode == 0:
+        return
+
+    try:
+        docker_group = grp.getgrnam("docker")
+        user = pwd.getpwuid(os.getuid())
+    except KeyError:
+        return
+
+    current_gids = set(os.getgroups())
+    current_gids.add(os.getgid())
+    current_gids.add(os.getegid())
+
+    try:
+        configured_gids = set(
+            os.getgrouplist(
+                user.pw_name,
+                user.pw_gid
+            )
+        )
+    except OSError:
+        return
+
+    docker_gid = docker_group.gr_gid
+
+    if docker_gid not in configured_gids:
+        return
+
+    if docker_gid in current_gids:
+        return
+
+    script = str(
+        Path(__file__).resolve()
+    )
+
+    command = shlex.join(
+        [
+            sys.executable,
+            script,
+            *sys.argv[1:]
+        ]
+    )
+
+    print(
+        "La sesión actual todavía no tiene "
+        "activo el grupo docker."
+    )
+
+    print(
+        "Reiniciando Linux Desktop Containers "
+        "con los permisos correctos..."
+    )
+
+    os.execvp(
+        "sg",
+        [
+            "sg",
+            "docker",
+            "-c",
+            command
+        ]
+    )
 
 
 def clear() -> None:
@@ -793,7 +878,10 @@ def installed_menu() -> None:
     )
 
 
+
 def main() -> None:
+
+    ensure_docker_group_session()
 
     while True:
 
