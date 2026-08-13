@@ -27,6 +27,16 @@ from manager.containers import (
 from manager.dependencies import detect_freerdp
 
 
+DEFAULT_RDP_ARGUMENTS = [
+    "/gfx:RFX",
+    "/gdi:sw",
+    "/dynamic-resolution",
+    "/clipboard",
+    "/sound",
+    "/cert:ignore",
+]
+
+
 def error(message: str) -> None:
     print(f"ERROR: {message}", file=sys.stderr)
     sys.exit(1)
@@ -51,7 +61,6 @@ def get_desktop(
     distro_key: str,
     desktop_key: str
 ) -> dict:
-
     try:
         distro = catalog["distros"][distro_key]
     except KeyError:
@@ -83,7 +92,6 @@ def wait_for_xrdp(
 ) -> bool:
 
     for _ in range(attempts):
-
         xrdp = subprocess.run(
             [
                 "docker",
@@ -123,11 +131,35 @@ def wait_for_xrdp(
     return False
 
 
+def get_rdp_arguments(
+    rdp: dict
+) -> list[str]:
+    arguments = rdp.get("arguments")
+
+    if arguments is None:
+        return DEFAULT_RDP_ARGUMENTS.copy()
+
+    if not isinstance(arguments, list):
+        error(
+            "La configuración rdp.arguments "
+            "debe ser una lista."
+        )
+
+    for argument in arguments:
+        if not isinstance(argument, str):
+            error(
+                "Todos los valores de "
+                "rdp.arguments deben ser texto."
+            )
+
+    return arguments
+
+
 def launch_rdp(
     *,
     container_name: str,
     container_port: int,
-    user: str
+    rdp: dict
 ) -> None:
 
     client = detect_freerdp()
@@ -148,18 +180,19 @@ def launch_rdp(
             "puerto RDP del contenedor."
         )
 
+    user = rdp["user"]
+    password = rdp.get(
+        "password",
+        "1234"
+    )
+
     command = [
-    client,
-    f"/v:127.0.0.1:{host_port}",
-    f"/u:{user}",
-    "/p:1234",
-    "/gfx:RFX",
-    "/gdi:sw",
-    "/dynamic-resolution",
-    "/clipboard",
-    "/sound",
-    "/cert:ignore"
-	]
+        client,
+        f"/v:127.0.0.1:{host_port}",
+        f"/u:{user}",
+        f"/p:{password}",
+        *get_rdp_arguments(rdp),
+    ]
 
     subprocess.run(
         command,
@@ -187,11 +220,10 @@ def main() -> None:
     )
 
     container = desktop["container"]
+    rdp = desktop["rdp"]
 
     container_name = container["name"]
     container_port = container["port"]
-
-    user = desktop["rdp"]["user"]
 
     if not container_exists(container_name):
         error(
@@ -201,7 +233,6 @@ def main() -> None:
         )
 
     if not container_running(container_name):
-
         print(
             f"Iniciando {container_name}..."
         )
@@ -223,7 +254,7 @@ def main() -> None:
     launch_rdp(
         container_name=container_name,
         container_port=container_port,
-        user=user
+        rdp=rdp
     )
 
 

@@ -27,12 +27,21 @@
           },
 
           "rdp": {
-            "user": "arch"
+            "user": "arch",
+            "password": "1234",
+            "arguments": [
+              "/gfx:RFX",
+              "/gdi:sw",
+              "/dynamic-resolution",
+              "/clipboard",
+              "/sound",
+              "/cert:ignore"
+            ]
           },
 
           "security": {
             "seccomp": "common/security/seccomp-brave.json",
-	    "apparmor": "linux-desktop-containers"
+            "apparmor": "linux-desktop-containers"
           },
 
           "shortcut": {
@@ -57,12 +66,45 @@
       "desktops": {
         "xfce": {
           "name": "XFCE",
-          "available": false
+          "available": true,
+
+          "image": {
+            "remote": "ghcr.io/fartavia3210-design/linux-desktop-containers/debian-xfce:latest",
+            "build_context": "distros/debian/xfce"
+          },
+
+          "container": {
+            "name": "ldc-debian-xfce",
+            "port": 3389,
+            "host_port": "auto",
+            "shm_size": "1g"
+          },
+
+          "rdp": {
+            "user": "debian",
+            "password": "1234",
+            "arguments": [
+              "/dynamic-resolution",
+              "/clipboard",
+              "/sound",
+              "/cert:ignore"
+            ]
+          },
+
+          "security": {
+            "seccomp": "common/security/seccomp-brave.json"
+          },
+
+          "shortcut": {
+            "name": "Debian XFCE"
+          }
         },
+
         "kde": {
           "name": "KDE Plasma",
           "available": false
         },
+
         "gnome": {
           "name": "GNOME",
           "available": false
@@ -77,10 +119,12 @@
           "name": "XFCE",
           "available": false
         },
+
         "kde": {
           "name": "KDE Plasma",
           "available": false
         },
+
         "gnome": {
           "name": "GNOME",
           "available": false
@@ -95,10 +139,12 @@
           "name": "XFCE",
           "available": false
         },
+
         "kde": {
           "name": "KDE Plasma",
           "available": false
         },
+
         "gnome": {
           "name": "GNOME",
           "available": false
