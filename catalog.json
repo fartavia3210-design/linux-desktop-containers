@@ -92,7 +92,8 @@
           },
 
           "security": {
-            "seccomp": "common/security/seccomp-brave.json"
+            "seccomp": "common/security/seccomp-brave.json",
+            "apparmor": "linux-desktop-containers"
           },
 
           "shortcut": {
