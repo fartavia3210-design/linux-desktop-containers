@@ -122,6 +122,19 @@ RUN useradd -m -s /bin/bash debian && \
     usermod -aG sudo debian
 
 # ============================================================
+# Desactivar light-locker en sesiones XRDP
+# ============================================================
+
+RUN mkdir -p /home/debian/.config/autostart && \
+    printf '%s\n' \
+        '[Desktop Entry]' \
+        'Type=Application' \
+        'Name=Light Locker' \
+        'Hidden=true' \
+        > /home/debian/.config/autostart/light-locker.desktop && \
+    chown -R debian:debian /home/debian/.config
+
+# ============================================================
 # Sesión XFCE + audio XRDP
 # ============================================================
 
