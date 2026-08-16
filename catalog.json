@@ -6,6 +6,28 @@
     "registry": "ghcr.io/fartavia3210-design/linux-desktop-containers"
   },
 
+  "rdp_profiles": {
+    "standard": {
+      "arguments": [
+        "/dynamic-resolution",
+        "/clipboard",
+        "/sound",
+        "/cert:ignore"
+      ]
+    },
+
+    "compat-rfx": {
+      "arguments": [
+        "/gfx:RFX",
+        "/gdi:sw",
+        "/dynamic-resolution",
+        "/clipboard",
+        "/sound",
+        "/cert:ignore"
+      ]
+    }
+  },
+
   "distros": {
     "arch": {
       "name": "Arch Linux",
@@ -29,14 +51,7 @@
           "rdp": {
             "user": "arch",
             "password": "1234",
-            "arguments": [
-              "/gfx:RFX",
-              "/gdi:sw",
-              "/dynamic-resolution",
-              "/clipboard",
-              "/sound",
-              "/cert:ignore"
-            ]
+            "default_profile": "compat-rfx"
           },
 
           "security": {
@@ -83,12 +98,10 @@
           "rdp": {
             "user": "debian",
             "password": "1234",
-            "arguments": [
-              "/dynamic-resolution",
-              "/clipboard",
-              "/sound",
-              "/cert:ignore"
-            ]
+            "default_profile": "standard",
+            "host_profile_overrides": {
+              "arch": "compat-rfx"
+            }
           },
 
           "security": {

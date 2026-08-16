@@ -25,16 +25,10 @@ from manager.containers import (
     start_container,
 )
 from manager.dependencies import detect_freerdp
-
-
-DEFAULT_RDP_ARGUMENTS = [
-    "/gfx:RFX",
-    "/gdi:sw",
-    "/dynamic-resolution",
-    "/clipboard",
-    "/sound",
-    "/cert:ignore",
-]
+from manager.rdp_profiles import (
+    RDPProfileError,
+    resolve_rdp_profile,
+)
 
 
 def error(message: str) -> None:
@@ -131,35 +125,12 @@ def wait_for_xrdp(
     return False
 
 
-def get_rdp_arguments(
-    rdp: dict
-) -> list[str]:
-    arguments = rdp.get("arguments")
-
-    if arguments is None:
-        return DEFAULT_RDP_ARGUMENTS.copy()
-
-    if not isinstance(arguments, list):
-        error(
-            "La configuración rdp.arguments "
-            "debe ser una lista."
-        )
-
-    for argument in arguments:
-        if not isinstance(argument, str):
-            error(
-                "Todos los valores de "
-                "rdp.arguments deben ser texto."
-            )
-
-    return arguments
-
-
 def launch_rdp(
     *,
     container_name: str,
     container_port: int,
-    rdp: dict
+    rdp: dict,
+    rdp_arguments: list[str]
 ) -> None:
 
     client = detect_freerdp()
@@ -191,7 +162,7 @@ def launch_rdp(
         f"/v:127.0.0.1:{host_port}",
         f"/u:{user}",
         f"/p:{password}",
-        *get_rdp_arguments(rdp),
+        *rdp_arguments,
     ]
 
     subprocess.run(
@@ -221,6 +192,16 @@ def main() -> None:
 
     container = desktop["container"]
     rdp = desktop["rdp"]
+
+    try:
+        _, rdp_arguments = resolve_rdp_profile(
+            catalog,
+            rdp
+        )
+    except RDPProfileError as exc:
+        error(
+            f"Configuración RDP inválida: {exc}"
+        )
 
     container_name = container["name"]
     container_port = container["port"]
@@ -254,7 +235,8 @@ def main() -> None:
     launch_rdp(
         container_name=container_name,
         container_port=container_port,
-        rdp=rdp
+        rdp=rdp,
+        rdp_arguments=rdp_arguments
     )
 
 
