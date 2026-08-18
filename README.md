@@ -12,23 +12,23 @@ Ejecuta entornos de escritorio Linux completos dentro de contenedores Docker med
 
 ## Descripción
 
-Linux Desktop Containers es un proyecto para ejecutar distribuciones Linux con entornos de escritorio completos dentro de contenedores Docker.
+Linux Desktop Containers es un proyecto para ejecutar distribuciones Linux con entornos de escritorio completos dentro de contenedores Docker y acceder a ellos mediante RDP.
 
-El proyecto busca ocultar la complejidad de Docker, XRDP y FreeRDP al usuario final. Después de realizar la instalación inicial, las distribuciones disponibles pueden administrarse desde un único comando:
+El objetivo es ocultar al usuario final la complejidad de Docker, XRDP, xorgxrdp y FreeRDP. Después de instalar el administrador, los escritorios disponibles pueden gestionarse desde un único comando:
 
 ```bash
 linux-desktops
 ```
 
-Desde el administrador se puede instalar, iniciar, detener, actualizar, recrear y desinstalar cada entorno disponible.
-
-Actualmente la primera combinación completamente funcional es:
+Actualmente existen tres combinaciones XFCE funcionales e integradas:
 
 ```text
 Arch Linux + XFCE
+Debian 13 + XFCE
+Fedora 44 + XFCE
 ```
 
-Las demás distribuciones y escritorios incluidos en el catálogo continúan en desarrollo.
+El proyecto mantiene una arquitectura común para contenedores, seguridad, perfiles RDP, accesos de aplicaciones, dependencias y publicación de imágenes, evitando soluciones globales innecesarias cuando un problema pertenece a un host o distribución específica.
 
 ---
 
@@ -36,16 +36,16 @@ Las demás distribuciones y escritorios incluidos en el catálogo continúan en 
 
 | Distribución | Escritorio | Estado |
 |---|---|---|
-| Arch Linux | XFCE | Disponible |
+| Arch Linux | XFCE | ✅ Disponible |
 | Arch Linux | KDE Plasma | Pendiente |
 | Arch Linux | GNOME | Pendiente |
-| Debian | XFCE | Pendiente |
+| Debian | XFCE | ✅ Disponible |
 | Debian | KDE Plasma | Pendiente |
 | Debian | GNOME | Pendiente |
 | Ubuntu | XFCE | Pendiente |
 | Ubuntu | KDE Plasma | Pendiente |
 | Ubuntu | GNOME | Pendiente |
-| Fedora | XFCE | Pendiente |
+| Fedora | XFCE | ✅ Disponible |
 | Fedora | KDE Plasma | Pendiente |
 | Fedora | GNOME | Pendiente |
 | Xubuntu | XFCE | Pendiente |
@@ -53,13 +53,77 @@ Las demás distribuciones y escritorios incluidos en el catálogo continúan en 
 
 ---
 
+## Imágenes disponibles
+
+### Arch Linux + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
+```
+
+```text
+Contenedor: ldc-arch-xfce
+Usuario RDP: arch
+Contraseña: 1234
+```
+
+### Debian 13 + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/debian-xfce:latest
+```
+
+```text
+Contenedor: ldc-debian-xfce
+Usuario RDP: debian
+Contraseña: 1234
+```
+
+### Fedora 44 + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/fedora-xfce:latest
+```
+
+```text
+Contenedor: ldc-fedora-xfce
+Usuario RDP: fedora
+Contraseña: 1234
+```
+
+> Las credenciales están actualmente definidas en el catálogo para simplificar la etapa de desarrollo. Se planea sustituir este mecanismo por una gestión de credenciales más adecuada.
+
+---
+
+## Funciones actuales
+
+El administrador permite:
+
+- detectar el sistema anfitrión;
+- detectar dependencias;
+- instalar dependencias mediante `pacman`, `apt` o `dnf`;
+- comprobar Docker y Docker Buildx;
+- detectar FreeRDP;
+- listar distribuciones y escritorios;
+- descargar imágenes desde GHCR;
+- crear contenedores automáticamente;
+- asignar puertos RDP dinámicos;
+- iniciar escritorios;
+- detener contenedores;
+- consultar su estado;
+- actualizar imágenes;
+- recrear contenedores;
+- desinstalar escritorios;
+- eliminar opcionalmente imágenes locales;
+- crear y recrear accesos en el menú de aplicaciones;
+- aplicar perfiles de seguridad según el host;
+- seleccionar perfiles RDP según el catálogo y el host.
+
+---
+
 ## Cómo funciona
 
-Las imágenes Docker no se construyen en la computadora del usuario durante la instalación.
-
-Cada imagen se prepara previamente con la distribución, el escritorio y los componentes necesarios. Una vez validada, se publica en GitHub Container Registry.
-
-El flujo para el usuario es:
+Las imágenes Docker se preparan previamente con la distribución, el escritorio y los componentes necesarios.
 
 ```text
 GitHub
@@ -85,161 +149,333 @@ Descargar imagen desde GHCR
   v
 Crear contenedor Docker
   |
-  v
-Asignar puerto RDP local
+  +--> seguridad del host
+  +--> seccomp
+  +--> /dev/shm
+  +--> puerto RDP local dinámico
   |
   v
-Crear acceso en el menú de aplicaciones
+Crear acceso de aplicaciones
   |
   v
 FreeRDP
   |
   v
-XRDP + Xorg
+XRDP
+  |
+  v
+xorgxrdp + Xorg
   |
   v
 Escritorio Linux
 ```
 
-Por ejemplo, Arch Linux + XFCE utiliza:
+Durante una instalación normal las imágenes no necesitan construirse localmente. Docker descarga las capas publicadas en GHCR y reutiliza capas existentes cuando es posible.
+
+---
+
+## Arquitectura gráfica
 
 ```text
-ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
+FreeRDP
+   |
+   v
+XRDP
+   |
+   v
+xorgxrdp
+   |
+   v
+Xorg
+   |
+   v
+XFCE
 ```
 
-La imagen ya contiene el sistema preparado.
+La conexión se resuelve mediante perfiles RDP declarativos definidos en `catalog.json`.
 
-Por esta razón, instalar desde Linux Desktop Containers es considerablemente más rápido que construir la imagen desde el Dockerfile. Docker descarga las capas que necesita y crea un contenedor a partir de la imagen existente.
+### Perfil `standard`
 
-Si las capas ya existen localmente, Docker también puede reutilizarlas.
+```text
+/dynamic-resolution
+/clipboard
+/sound
+/cert:ignore
+```
+
+Es el perfil normal para las combinaciones que funcionan correctamente con la ruta gráfica predeterminada de XRDP/FreeRDP.
+
+### Perfil `compat-rfx`
+
+```text
+/gfx:RFX
+/gdi:sw
+/dynamic-resolution
+/clipboard
+/sound
+/cert:ignore
+```
+
+Es una ruta de compatibilidad basada en RemoteFX y GDI por software.
+
+### Selección actual de perfiles
+
+| Escritorio | Perfil predeterminado | Excepciones |
+|---|---|---|
+| Arch Linux + XFCE | `compat-rfx` | Ninguna actualmente |
+| Debian + XFCE | `standard` | Host Arch Linux puro → `compat-rfx` |
+| Fedora + XFCE | `standard` | Ninguna actualmente |
+
+La resolución se realiza en `manager/rdp_profiles.py`.
+
+Los overrides de host se aplican por el `ID` exacto de la distribución anfitriona. El workaround de Arch puro no se aplica automáticamente a todas las distribuciones derivadas de Arch.
 
 ---
 
-## Funciones actuales
+## Audio
 
-El administrador permite:
+Las imágenes XFCE disponibles incorporan audio remoto mediante PipeWire y XRDP.
 
-- consultar las distribuciones disponibles;
-- instalar escritorios;
-- descargar imágenes desde GHCR;
-- crear contenedores automáticamente;
-- iniciar escritorios;
-- detener contenedores;
-- consultar su estado;
-- actualizar imágenes;
-- recrear contenedores;
-- desinstalar escritorios;
-- eliminar opcionalmente la imagen local;
-- recrear accesos del menú de aplicaciones;
-- comprobar dependencias.
+```text
+Aplicaciones
+   |
+   v
+PipeWire / pipewire-pulse
+   |
+   v
+WirePlumber
+   |
+   v
+pipewire-module-xrdp
+   |
+   +--> xrdp-sink
+   |
+   +--> xrdp-source
+   |
+   v
+FreeRDP /sound
+```
 
-Arch Linux + XFCE incluye además:
+Esto permite que el audio reproducido dentro del contenedor se escuche en el host.
 
-- XRDP;
-- xorgxrdp;
-- Xorg;
-- RFX;
-- resolución dinámica;
-- portapapeles;
-- audio;
-- PipeWire;
-- Brave Browser;
-- perfil seccomp personalizado.
+Fedora 44 + XFCE inicia PipeWire, `pipewire-pulse` y WirePlumber dentro de la sesión XRDP y utiliza el autostart de `pipewire-module-xrdp` para cargar los dispositivos XRDP.
 
 ---
 
-## Arquitectura del proyecto
+## Brave Browser y sandbox
 
-La estructura general del repositorio es:
+Las imágenes XFCE disponibles incluyen Brave Browser.
+
+Brave se ejecuta con su sandbox real. El proyecto no depende de:
+
+```text
+--no-sandbox
+--privileged
+seccomp=unconfined
+```
+
+El perfil compartido:
+
+```text
+common/security/seccomp-brave.json
+```
+
+permite las operaciones adicionales necesarias para Chromium/Brave sin desactivar globalmente seccomp.
+
+Las imágenes se crean con:
+
+```text
+--shm-size=1g
+```
+
+para evitar problemas de Chromium/Brave con el `/dev/shm` predeterminado de Docker.
+
+Las pruebas con `brave://sandbox` han confirmado las principales capas de sandbox, incluyendo namespaces y Seccomp-BPF.
+
+---
+
+## Seguridad del host
+
+Linux Desktop Containers adapta la creación del contenedor al sistema de seguridad del host.
+
+### Seccomp
+
+Las combinaciones disponibles utilizan:
+
+```text
+common/security/seccomp-brave.json
+```
+
+El perfil se aplica únicamente al contenedor correspondiente.
+
+### AppArmor
+
+Si AppArmor está habilitado y la combinación define un perfil, el administrador utiliza:
+
+```text
+--security-opt apparmor=linux-desktop-containers
+```
+
+Esto mantiene AppArmor habilitado globalmente en el host.
+
+### SELinux
+
+Si el host utiliza SELinux en modo Enforcing, el administrador añade únicamente al contenedor:
+
+```text
+--security-opt label=disable
+```
+
+Esto desactiva el etiquetado SELinux para ese contenedor, pero **no desactiva SELinux en el host**.
+
+### Sin SELinux ni AppArmor
+
+Si ninguno de los dos mecanismos está activo, no se añade una opción LSM adicional.
+
+---
+
+## Compatibilidad del host
+
+El administrador reconoce estas familias:
+
+| Familia | Gestor de paquetes |
+|---|---|
+| Arch Linux / CachyOS / Manjaro | `pacman` |
+| Debian / Ubuntu y derivados | `apt` |
+| Fedora y derivados | `dnf` |
+
+La instalación automática de dependencias está implementada para los tres gestores.
+
+La arquitectura ha sido probada en distintos hosts Linux, incluyendo Arch Linux, CachyOS, Debian y Fedora. La ruta Ubuntu/AppArmor también forma parte de la compatibilidad del proyecto.
+
+### Nota sobre Arch Linux puro
+
+En Arch Linux puro se detectó una incompatibilidad de la ruta H.264/VAAPI del cliente FreeRDP en determinadas conexiones, produciendo pantalla negra.
+
+La ruta comprobada de compatibilidad es:
+
+```text
+/gfx:RFX
+/gdi:sw
+```
+
+Por esta razón Debian XFCE cambia automáticamente a `compat-rfx` cuando el `ID` exacto del host es `arch`.
+
+---
+
+## Red
+
+El puerto RDP de cada contenedor se publica exclusivamente sobre localhost:
+
+```text
+127.0.0.1
+```
+
+Ejemplo:
+
+```text
+127.0.0.1:32770 -> 3389/tcp
+```
+
+Docker puede asignar un puerto diferente a cada contenedor.
+
+El launcher obtiene automáticamente el puerto publicado antes de iniciar FreeRDP, por lo que el usuario no necesita conocerlo manualmente.
+
+El diseño actual está orientado a acceso local. No se recomienda exponer XRDP directamente a Internet.
+
+---
+
+## Estructura del repositorio
 
 ```text
 linux-desktop-containers/
 ├── .github/
 │   └── workflows/
+│       ├── publish-arch-xfce.yml
+│       ├── publish-debian-xfce.yml
+│       └── publish-fedora-xfce.yml
 ├── assets/
 ├── common/
 │   ├── scripts/
 │   └── security/
+│       └── seccomp-brave.json
 ├── distros/
 │   ├── arch/
+│   │   └── xfce/
 │   ├── debian/
+│   │   └── xfce/
 │   ├── fedora/
+│   │   └── xfce/
 │   ├── lubuntu/
 │   ├── ubuntu/
 │   └── xubuntu/
 ├── launchers/
+│   └── desktop-launcher
 ├── manager/
+│   ├── catalog.py
+│   ├── config.py
+│   ├── containers.py
+│   ├── dependencies.py
+│   ├── images.py
+│   ├── installer.py
+│   ├── rdp_profiles.py
+│   ├── shortcuts.py
+│   └── updater.py
 ├── catalog.json
 ├── install.sh
 ├── linux-desktops
+├── LICENSE
 └── README.md
 ```
 
 ### `catalog.json`
 
-Define las distribuciones y escritorios reconocidos por el administrador.
+Es la fuente declarativa principal para:
 
-Entre otros valores, contiene:
-
+- distribuciones;
+- escritorios;
 - disponibilidad;
-- imagen remota;
-- nombre del contenedor;
-- configuración de puertos;
-- memoria compartida;
-- usuario RDP;
-- perfil seccomp;
-- nombre del acceso de aplicaciones.
+- imágenes remotas;
+- contextos de build;
+- nombres de contenedores;
+- puertos;
+- tamaño de memoria compartida;
+- credenciales RDP actuales;
+- perfiles RDP;
+- overrides por host;
+- perfiles seccomp;
+- perfiles AppArmor;
+- nombres de accesos de aplicaciones.
 
 ### `manager/`
 
-Contiene la lógica principal del administrador.
-
-```text
-catalog.py
-config.py
-containers.py
-dependencies.py
-images.py
-installer.py
-shortcuts.py
-updater.py
-```
+Contiene la lógica reutilizable del administrador para detección del host, dependencias, ciclo de vida de contenedores, seguridad, imágenes, instalación, actualización, accesos y perfiles RDP.
 
 ### `distros/`
 
-Contiene las implementaciones específicas de cada combinación.
-
-Ejemplo:
+Cada implementación utiliza:
 
 ```text
-distros/arch/xfce/
+distros/<distribucion>/<escritorio>/
 ```
 
-Cada combinación puede contener su Dockerfile, scripts de inicio y configuración particular.
+Por ejemplo:
+
+```text
+distros/fedora/xfce/
+```
+
+Cada combinación puede contener su `Dockerfile`, scripts de inicio y configuración específica.
 
 ### `common/`
 
-Contiene recursos reutilizables entre diferentes imágenes, como perfiles de seguridad y scripts comunes.
-
-### `launchers/`
-
-Contiene el launcher encargado de iniciar el contenedor y establecer la conexión RDP.
+Contiene recursos compartidos entre imágenes, como el perfil seccomp de Brave.
 
 ---
 
 ## Requisitos
 
-Actualmente el flujo de instalación automática ha sido probado principalmente en distribuciones basadas en Arch Linux.
-
-Ejemplos:
-
-```text
-Arch Linux
-CachyOS
-Manjaro
-```
-
-Dependencias utilizadas:
+El administrador utiliza:
 
 - Docker;
 - Docker Buildx;
@@ -248,9 +484,7 @@ Dependencias utilizadas:
 - Bash;
 - FreeRDP.
 
-El instalador puede detectar diferentes familias de distribuciones, pero la instalación automática de paquetes está implementada actualmente para `pacman`.
-
-El soporte equivalente para `apt` y `dnf` está pendiente.
+El propio administrador puede detectar dependencias faltantes y generar un plan de instalación para `pacman`, `apt` y `dnf`.
 
 ---
 
@@ -262,7 +496,7 @@ El soporte equivalente para `apt` y `dnf` está pendiente.
 git clone https://github.com/fartavia3210-design/linux-desktop-containers.git
 ```
 
-### 2. Entrar al directorio
+### 2. Entrar al proyecto
 
 ```bash
 cd linux-desktop-containers
@@ -274,14 +508,14 @@ cd linux-desktop-containers
 ./install.sh
 ```
 
-El instalador comprueba el sistema y prepara:
+El instalador prepara, entre otros:
 
 ```text
 ~/.local/bin/linux-desktops
 ~/.local/bin/linux-desktop-launcher
 ```
 
-También inicializa los directorios de configuración correspondientes y crea una entrada para Linux Desktop Containers en el menú de aplicaciones.
+También inicializa los directorios de configuración y crea la entrada principal del proyecto en el menú de aplicaciones.
 
 ---
 
@@ -306,7 +540,7 @@ Linux Desktop Containers
 0) Salir
 ```
 
-Las funciones de actualización del propio administrador y el panel de configuración todavía se encuentran en desarrollo.
+Las funciones avanzadas de autoactualización del administrador y configuración continúan en desarrollo.
 
 ---
 
@@ -318,16 +552,26 @@ Entrar en:
 Distribuciones
 ```
 
-Seleccionar la distribución y posteriormente el escritorio.
+Seleccionar una distribución y posteriormente un escritorio disponible.
 
-Ejemplo:
+Ejemplos:
 
 ```text
 Arch Linux
 └── XFCE
 ```
 
-El administrador realiza automáticamente:
+```text
+Debian
+└── XFCE
+```
+
+```text
+Fedora
+└── XFCE
+```
+
+El administrador realiza:
 
 ```text
 Comprobar imagen
@@ -338,8 +582,10 @@ docker pull
       v
 docker create
       |
-      v
-Configurar puerto y seguridad
+      +--> --shm-size
+      +--> seccomp
+      +--> AppArmor / SELinux según host
+      +--> puerto local dinámico
       |
       v
 Crear acceso de aplicaciones
@@ -349,7 +595,7 @@ Crear acceso de aplicaciones
 
 ## Gestión de escritorios
 
-Para una instalación existente están disponibles actualmente:
+Para una instalación existente están disponibles:
 
 ```text
 Iniciar / Abrir escritorio
@@ -363,24 +609,17 @@ Recrear acceso directo
 
 ### Actualizar
 
-Consulta la imagen publicada en GHCR.
-
-Si la imagen remota ha cambiado, Docker descarga la nueva versión y el administrador puede recrear el contenedor.
+Consulta la imagen remota publicada en GHCR. Si existe una versión nueva, Docker descarga las capas necesarias y el contenedor puede recrearse usando la imagen actualizada.
 
 ### Recrear contenedor
 
 Elimina el contenedor existente y crea otro a partir de la imagen instalada.
 
-> La persistencia completa del directorio personal todavía no está implementada. Los datos almacenados únicamente dentro del contenedor pueden perderse durante una recreación.
+> La persistencia completa del directorio personal todavía no está implementada. Los datos almacenados exclusivamente dentro del contenedor pueden perderse durante una recreación.
 
 ### Desinstalar
 
-Elimina:
-
-- el contenedor;
-- el acceso de aplicaciones.
-
-También permite eliminar opcionalmente la imagen Docker almacenada localmente.
+Elimina el contenedor y su acceso de aplicaciones. También permite eliminar opcionalmente la imagen Docker local.
 
 ---
 
@@ -392,98 +631,17 @@ Los accesos creados por Linux Desktop Containers se almacenan en:
 ~/.local/share/applications/
 ```
 
-Por ejemplo:
+Ejemplos:
 
 ```text
 linux-desktop-containers-arch-xfce.desktop
+linux-desktop-containers-debian-xfce.desktop
+linux-desktop-containers-fedora-xfce.desktop
 ```
-
-De esta forma las distribuciones instaladas pueden aparecer en el lanzador de aplicaciones del entorno anfitrión.
-
----
-
-## Conexión gráfica
-
-La arquitectura gráfica actual utiliza:
-
-```text
-FreeRDP
-   |
-   v
-XRDP
-   |
-   v
-xorgxrdp
-   |
-   v
-Xorg
-   |
-   v
-Entorno de escritorio
-```
-
-La configuración estable actual utiliza:
-
-```text
-RFX
-GDI por software
-Dynamic Resolution
-Clipboard
-Audio
-```
-
----
-
-## Red
-
-Los puertos RDP se publican únicamente sobre la interfaz local:
-
-```text
-127.0.0.1
-```
-
-Ejemplo:
-
-```text
-127.0.0.1:32770 -> 3389/tcp
-```
-
-Docker puede asignar automáticamente un puerto diferente para cada contenedor.
-
-El launcher obtiene ese puerto automáticamente antes de iniciar FreeRDP.
-
-No es necesario que el usuario conozca el puerto asignado.
-
----
-
-## Seguridad
-
-Arch Linux + XFCE utiliza un perfil seccomp personalizado.
-
-El objetivo es habilitar únicamente las operaciones adicionales necesarias para el funcionamiento del escritorio y de las aplicaciones que necesitan mecanismos de sandboxing, sin ejecutar el contenedor completo utilizando `--privileged`.
-
-El servicio RDP se publica exclusivamente sobre localhost y no está pensado para exposición directa a Internet.
-
----
-
-## Credenciales actuales
-
-La imagen Arch Linux + XFCE utiliza actualmente:
-
-```text
-Usuario: arch
-Contraseña: 1234
-```
-
-El launcher proporciona estas credenciales automáticamente al cliente RDP.
-
-Este mecanismo será sustituido posteriormente por una solución de gestión de credenciales más adecuada.
 
 ---
 
 ## Configuración local
-
-El proyecto utiliza rutas XDG para separar los datos del usuario del repositorio.
 
 Configuración:
 
@@ -507,185 +665,137 @@ Estado:
 
 ## Publicación de imágenes
 
-Las imágenes pueden construirse y publicarse mediante GitHub Actions.
+Las imágenes se construyen y publican mediante GitHub Actions y GitHub Container Registry.
 
-Para Arch Linux + XFCE:
+Workflows:
 
 ```text
 .github/workflows/publish-arch-xfce.yml
+.github/workflows/publish-debian-xfce.yml
+.github/workflows/publish-fedora-xfce.yml
 ```
 
-Cuando cambia la implementación de Arch XFCE y los cambios llegan a `main`, el workflow puede:
-
 ```text
-Checkout
+Push a main
    |
    v
-Build
+GitHub Actions
+   |
+   v
+Checkout
    |
    v
 Login GHCR
    |
    v
-Push
+docker build
    |
    v
-arch-xfce:latest
+docker push
+   |
+   v
+ghcr.io/fartavia3210-design/linux-desktop-containers/<imagen>:latest
 ```
 
-La publicación utiliza el `GITHUB_TOKEN` temporal proporcionado por GitHub Actions.
+La publicación utiliza el `GITHUB_TOKEN` temporal proporcionado por GitHub Actions. No es necesario almacenar un Personal Access Token en el repositorio.
 
-No es necesario incluir un Personal Access Token en el repositorio.
+---
+
+## Notas de las implementaciones actuales
+
+### Arch Linux + XFCE
+
+- Base rolling de Arch Linux.
+- XRDP + xorgxrdp.
+- PipeWire.
+- Brave Browser con sandbox.
+- `--shm-size=1g`.
+- Perfil RDP actual: `compat-rfx`.
+- Perfil seccomp compartido.
+
+### Debian 13 + XFCE
+
+- Base Debian 13.
+- XRDP 0.10.x + xorgxrdp.
+- PipeWire, WirePlumber y audio XRDP.
+- Brave Browser con sandbox.
+- `--shm-size=1g`.
+- Perfil RDP normal: `standard`.
+- Override exacto para host Arch puro: `compat-rfx`.
+- `light-locker` deshabilitado en la sesión XRDP para evitar fallos del locker dentro del contenedor.
+
+### Fedora 44 + XFCE
+
+- Base Fedora 44.
+- Paquetes Fedora de XRDP y xorgxrdp.
+- XFCE 4.20.
+- PipeWire + WirePlumber + `pipewire-module-xrdp`.
+- Brave Browser mediante repositorio RPM oficial.
+- Brave con sandbox real utilizando el perfil seccomp compartido.
+- `--shm-size=1g`.
+- Perfil RDP: `standard`.
+- `xfce-polkit` gráfico deshabilitado en autostart para sesiones XRDP dentro del contenedor; `polkitd` permanece disponible.
+- Rendimiento gráfico fluido con la configuración estándar.
 
 ---
 
 ## Limitaciones actuales
 
-Las siguientes funciones continúan pendientes:
+Continúan pendientes:
 
-- persistencia completa del usuario;
-- gestión segura de credenciales;
-- actualización automática del administrador;
-- panel de configuración;
-- instalación automática mediante `apt`;
-- instalación automática mediante `dnf`;
-- iconos específicos para cada distribución;
-- distribuciones y escritorios adicionales.
-
----
-
-## Imágenes Docker
-
-Las imágenes publicadas pueden descargarse independientemente del administrador.
-
-### Arch Linux
-
-#### XFCE
-
-**Disponible**
-
-```bash
-docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
-```
-
-#### KDE Plasma
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### GNOME
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-### Debian
-
-#### XFCE
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### KDE Plasma
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### GNOME
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-### Ubuntu
-
-#### XFCE
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### KDE Plasma
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### GNOME
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-### Fedora
-
-#### XFCE
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### KDE Plasma
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-#### GNOME
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-### Xubuntu
-
-#### XFCE
-
-**Pendiente**
-
-Imagen todavía no publicada.
-
-### Lubuntu
-
-#### LXQt
-
-**Pendiente**
-
-Imagen todavía no publicada.
+- persistencia completa del directorio personal;
+- gestión segura y configurable de credenciales;
+- panel de configuración completo;
+- actualización totalmente automática del administrador;
+- iconos específicos para todas las distribuciones;
+- más escritorios y distribuciones;
+- una arquitectura formal para acceso remoto más allá del modo localhost actual.
 
 ---
 
 ## Desarrollo
 
-Las nuevas implementaciones siguen la estructura:
+Las nuevas implementaciones siguen:
 
 ```text
 distros/<distribucion>/<escritorio>/
 ```
 
-Una vez construida y validada una combinación:
+Flujo recomendado:
 
 ```text
-Implementación
-      |
-      v
-Imagen Docker
-      |
-      v
-GitHub Container Registry
-      |
-      v
+Implementación experimental
+        |
+        v
+Pruebas locales
+        |
+        v
+Validación de XRDP
+        |
+        +--> video
+        +--> resolución dinámica
+        +--> clipboard
+        +--> audio
+        +--> sandbox
+        +--> seguridad del host
+        |
+        v
+Integración en distros/
+        |
+        v
+Workflow GHCR
+        |
+        v
 catalog.json
-      |
-      v
+        |
+        v
 available: true
-      |
-      v
+        |
+        v
 Disponible en linux-desktops
 ```
+
+Los cambios compartidos deben conservar la compatibilidad entre hosts y evitar workarounds globales cuando el problema pertenece a una distribución o entorno específico.
 
 ---
 
@@ -697,7 +807,7 @@ Copyright © 2026. Todos los derechos reservados.
 
 El código fuente se encuentra disponible públicamente para visualización y referencia. No se concede permiso para copiar, modificar, redistribuir, sublicenciar o crear trabajos derivados sin autorización previa del titular de los derechos.
 
-Consulta el archivo [`LICENSE`](LICENSE) para obtener más información.
+Consulta [`LICENSE`](LICENSE) para más información.
 
 ---
 
@@ -705,23 +815,23 @@ Consulta el archivo [`LICENSE`](LICENSE) para obtener más información.
 
 ## Description
 
-Linux Desktop Containers is a project designed to run complete Linux distributions with desktop environments inside Docker containers.
+Linux Desktop Containers is a project for running complete Linux distributions with desktop environments inside Docker containers and accessing them through RDP.
 
-The project aims to hide the complexity of Docker, XRDP and FreeRDP from the end user. After the initial installation, available distributions can be managed through a single command:
+Its goal is to hide the complexity of Docker, XRDP, xorgxrdp and FreeRDP from the end user. After installing the manager, available desktops can be controlled through a single command:
 
 ```bash
 linux-desktops
 ```
 
-The manager can install, start, stop, update, recreate and uninstall each available desktop environment.
-
-The first fully functional combination currently available is:
+There are currently three functional and integrated XFCE combinations:
 
 ```text
 Arch Linux + XFCE
+Debian 13 + XFCE
+Fedora 44 + XFCE
 ```
 
-The remaining distributions and desktop environments included in the catalog are still under development.
+The project uses a shared architecture for containers, security, RDP profiles, application launchers, dependencies and image publishing while avoiding unnecessary global workarounds for host-specific or distribution-specific issues.
 
 ---
 
@@ -729,16 +839,16 @@ The remaining distributions and desktop environments included in the catalog are
 
 | Distribution | Desktop | Status |
 |---|---|---|
-| Arch Linux | XFCE | Available |
+| Arch Linux | XFCE | ✅ Available |
 | Arch Linux | KDE Plasma | Pending |
 | Arch Linux | GNOME | Pending |
-| Debian | XFCE | Pending |
+| Debian | XFCE | ✅ Available |
 | Debian | KDE Plasma | Pending |
 | Debian | GNOME | Pending |
 | Ubuntu | XFCE | Pending |
 | Ubuntu | KDE Plasma | Pending |
 | Ubuntu | GNOME | Pending |
-| Fedora | XFCE | Pending |
+| Fedora | XFCE | ✅ Available |
 | Fedora | KDE Plasma | Pending |
 | Fedora | GNOME | Pending |
 | Xubuntu | XFCE | Pending |
@@ -746,13 +856,77 @@ The remaining distributions and desktop environments included in the catalog are
 
 ---
 
+## Available images
+
+### Arch Linux + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
+```
+
+```text
+Container: ldc-arch-xfce
+RDP user: arch
+Password: 1234
+```
+
+### Debian 13 + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/debian-xfce:latest
+```
+
+```text
+Container: ldc-debian-xfce
+RDP user: debian
+Password: 1234
+```
+
+### Fedora 44 + XFCE
+
+```bash
+docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/fedora-xfce:latest
+```
+
+```text
+Container: ldc-fedora-xfce
+RDP user: fedora
+Password: 1234
+```
+
+> Credentials are currently defined in the catalog to simplify the development stage. This mechanism is expected to be replaced by a more appropriate credential-management solution.
+
+---
+
+## Current features
+
+The manager supports:
+
+- host distribution detection;
+- dependency detection;
+- automatic dependency installation through `pacman`, `apt` or `dnf`;
+- Docker and Docker Buildx checks;
+- FreeRDP detection;
+- listing distributions and desktops;
+- pulling images from GHCR;
+- automatic container creation;
+- dynamic RDP host ports;
+- starting desktops;
+- stopping containers;
+- checking container status;
+- updating images;
+- recreating containers;
+- uninstalling desktops;
+- optionally removing local images;
+- creating and recreating application launchers;
+- host-aware security options;
+- host-aware declarative RDP profiles.
+
+---
+
 ## How it works
 
-Docker images are not built on the user's computer during installation.
-
-Each image is prepared in advance with the distribution, desktop environment and required components. Once validated, it is published to GitHub Container Registry.
-
-The user-side flow is:
+Docker images are prepared in advance with the distribution, desktop environment and required components.
 
 ```text
 GitHub
@@ -773,13 +947,15 @@ Select distribution
 Select desktop
   |
   v
-Download image from GHCR
+Pull image from GHCR
   |
   v
 Create Docker container
   |
-  v
-Assign local RDP port
+  +--> host security
+  +--> seccomp
+  +--> /dev/shm
+  +--> dynamic local RDP port
   |
   v
 Create application launcher
@@ -788,151 +964,306 @@ Create application launcher
 FreeRDP
   |
   v
-XRDP + Xorg
+XRDP
+  |
+  v
+xorgxrdp + Xorg
   |
   v
 Linux desktop
 ```
 
-For example, Arch Linux + XFCE uses:
+Images do not need to be built locally during normal installation. Docker downloads the published layers from GHCR and reuses existing layers whenever possible.
+
+---
+
+## Graphics architecture
 
 ```text
-ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
+FreeRDP
+   |
+   v
+XRDP
+   |
+   v
+xorgxrdp
+   |
+   v
+Xorg
+   |
+   v
+XFCE
 ```
 
-The image already contains the prepared system.
+RDP connections are resolved through declarative profiles defined in `catalog.json`.
 
-For this reason, installing through Linux Desktop Containers is considerably faster than building the image from its Dockerfile. Docker downloads the required layers and creates a container from the existing image.
+### `standard` profile
 
-If those layers already exist locally, Docker can reuse them.
+```text
+/dynamic-resolution
+/clipboard
+/sound
+/cert:ignore
+```
+
+This is the normal profile for combinations that work correctly with the default XRDP/FreeRDP graphics path.
+
+### `compat-rfx` profile
+
+```text
+/gfx:RFX
+/gdi:sw
+/dynamic-resolution
+/clipboard
+/sound
+/cert:ignore
+```
+
+This is a compatibility path based on RemoteFX and software GDI.
+
+### Current profile selection
+
+| Desktop | Default profile | Exceptions |
+|---|---|---|
+| Arch Linux + XFCE | `compat-rfx` | None currently |
+| Debian + XFCE | `standard` | Pure Arch Linux host → `compat-rfx` |
+| Fedora + XFCE | `standard` | None currently |
+
+Profile resolution is handled by `manager/rdp_profiles.py`.
+
+Host overrides use the exact host distribution `ID`, so the pure Arch workaround is not automatically applied to every Arch-derived distribution.
 
 ---
 
-## Current features
+## Audio
 
-The manager currently supports:
+Available XFCE images include XRDP audio redirection through PipeWire.
 
-- listing available distributions;
-- installing desktops;
-- downloading images from GHCR;
-- automatically creating containers;
-- starting desktops;
-- stopping containers;
-- checking container status;
-- updating images;
-- recreating containers;
-- uninstalling desktops;
-- optionally removing local images;
-- recreating application launchers;
-- checking dependencies.
+```text
+Applications
+   |
+   v
+PipeWire / pipewire-pulse
+   |
+   v
+WirePlumber
+   |
+   v
+pipewire-module-xrdp
+   |
+   +--> xrdp-sink
+   |
+   +--> xrdp-source
+   |
+   v
+FreeRDP /sound
+```
 
-Arch Linux + XFCE also includes:
+This allows sound generated inside the container to be played on the host.
 
-- XRDP;
-- xorgxrdp;
-- Xorg;
-- RFX;
-- dynamic resolution;
-- clipboard support;
-- audio;
-- PipeWire;
-- Brave Browser;
-- a custom seccomp profile.
+Fedora 44 + XFCE starts PipeWire, `pipewire-pulse` and WirePlumber inside the XRDP session and uses the `pipewire-module-xrdp` autostart entry to load the XRDP devices.
 
 ---
 
-## Project architecture
+## Brave Browser and sandboxing
 
-The general repository structure is:
+Available XFCE images include Brave Browser.
+
+Brave runs with its real Linux sandbox. The project does not rely on:
+
+```text
+--no-sandbox
+--privileged
+seccomp=unconfined
+```
+
+The shared profile:
+
+```text
+common/security/seccomp-brave.json
+```
+
+allows the additional operations required by Chromium/Brave without globally disabling seccomp.
+
+Containers use:
+
+```text
+--shm-size=1g
+```
+
+to avoid Chromium/Brave issues caused by Docker's small default `/dev/shm`.
+
+Testing with `brave://sandbox` has confirmed the main sandbox layers, including namespaces and Seccomp-BPF.
+
+---
+
+## Host security
+
+Linux Desktop Containers adapts container creation to the host security system.
+
+### Seccomp
+
+Available combinations use:
+
+```text
+common/security/seccomp-brave.json
+```
+
+The profile is applied only to the corresponding container.
+
+### AppArmor
+
+When AppArmor is enabled and the desktop entry defines a profile, the manager uses:
+
+```text
+--security-opt apparmor=linux-desktop-containers
+```
+
+This keeps AppArmor enabled globally on the host.
+
+### SELinux
+
+When the host uses SELinux in Enforcing mode, the manager adds only to the container:
+
+```text
+--security-opt label=disable
+```
+
+This disables SELinux labeling for that container but **does not disable SELinux on the host**.
+
+### Hosts without SELinux or AppArmor
+
+No additional LSM option is added.
+
+---
+
+## Host compatibility
+
+The manager recognizes these Linux families:
+
+| Family | Package manager |
+|---|---|
+| Arch Linux / CachyOS / Manjaro | `pacman` |
+| Debian / Ubuntu and derivatives | `apt` |
+| Fedora and derivatives | `dnf` |
+
+Automatic dependency installation is implemented for all three.
+
+The architecture has been tested on multiple Linux hosts, including Arch Linux, CachyOS, Debian and Fedora. The Ubuntu/AppArmor path is also part of the project's compatibility work.
+
+### Pure Arch Linux note
+
+On pure Arch Linux, an incompatibility was observed in the FreeRDP H.264/VAAPI graphics path for some connections, causing a black screen.
+
+The validated compatibility path is:
+
+```text
+/gfx:RFX
+/gdi:sw
+```
+
+For this reason Debian XFCE automatically switches to `compat-rfx` when the host's exact `ID` is `arch`.
+
+---
+
+## Networking
+
+Each container's RDP port is bound only to localhost:
+
+```text
+127.0.0.1
+```
+
+Example:
+
+```text
+127.0.0.1:32770 -> 3389/tcp
+```
+
+Docker can assign a different host port to each container.
+
+The launcher automatically discovers the published port before starting FreeRDP, so the user does not need to know it manually.
+
+The current design is local-first. Directly exposing XRDP to the Internet is not recommended.
+
+---
+
+## Repository structure
 
 ```text
 linux-desktop-containers/
 ├── .github/
 │   └── workflows/
+│       ├── publish-arch-xfce.yml
+│       ├── publish-debian-xfce.yml
+│       └── publish-fedora-xfce.yml
 ├── assets/
 ├── common/
 │   ├── scripts/
 │   └── security/
+│       └── seccomp-brave.json
 ├── distros/
 │   ├── arch/
+│   │   └── xfce/
 │   ├── debian/
+│   │   └── xfce/
 │   ├── fedora/
+│   │   └── xfce/
 │   ├── lubuntu/
 │   ├── ubuntu/
 │   └── xubuntu/
 ├── launchers/
+│   └── desktop-launcher
 ├── manager/
+│   ├── catalog.py
+│   ├── config.py
+│   ├── containers.py
+│   ├── dependencies.py
+│   ├── images.py
+│   ├── installer.py
+│   ├── rdp_profiles.py
+│   ├── shortcuts.py
+│   └── updater.py
 ├── catalog.json
 ├── install.sh
 ├── linux-desktops
+├── LICENSE
 └── README.md
 ```
 
 ### `catalog.json`
 
-Defines the distributions and desktop environments recognized by the manager.
-
-It includes information such as:
-
-- availability;
-- remote image;
-- container name;
-- port configuration;
-- shared memory;
-- RDP user;
-- seccomp profile;
-- application launcher name.
+The main declarative source for distributions, desktops, availability, remote images, build contexts, container names, ports, shared memory, current credentials, RDP profiles, host overrides, security profiles and application-launcher names.
 
 ### `manager/`
 
-Contains the main manager logic.
-
-```text
-catalog.py
-config.py
-containers.py
-dependencies.py
-images.py
-installer.py
-shortcuts.py
-updater.py
-```
+Contains reusable manager logic for host detection, dependencies, container lifecycle, security, images, installation, updates, application launchers and RDP profile resolution.
 
 ### `distros/`
 
-Contains the implementation of each distribution and desktop combination.
-
-Example:
+Each implementation follows:
 
 ```text
-distros/arch/xfce/
+distros/<distribution>/<desktop>/
 ```
 
-Each combination can contain its Dockerfile, startup scripts and specific configuration.
+For example:
+
+```text
+distros/fedora/xfce/
+```
+
+Each combination can contain its `Dockerfile`, startup scripts and specific configuration.
 
 ### `common/`
 
-Contains reusable resources such as security profiles and common scripts.
-
-### `launchers/`
-
-Contains the launcher responsible for starting containers and establishing RDP connections.
+Contains reusable resources shared by multiple images, such as the Brave seccomp profile.
 
 ---
 
 ## Requirements
 
-The automatic installation flow has currently been tested mainly on Arch-based distributions.
-
-Examples:
-
-```text
-Arch Linux
-CachyOS
-Manjaro
-```
-
-Required components include:
+The manager uses:
 
 - Docker;
 - Docker Buildx;
@@ -941,9 +1272,7 @@ Required components include:
 - Bash;
 - FreeRDP.
 
-The installer can detect multiple Linux distribution families, but automatic package installation is currently implemented for `pacman`.
-
-Equivalent `apt` and `dnf` support is pending.
+The manager can detect missing dependencies and build an installation plan for `pacman`, `apt` and `dnf`.
 
 ---
 
@@ -967,14 +1296,14 @@ cd linux-desktop-containers
 ./install.sh
 ```
 
-The installer checks the host system and prepares:
+The installer prepares, among others:
 
 ```text
 ~/.local/bin/linux-desktops
 ~/.local/bin/linux-desktop-launcher
 ```
 
-It also initializes the required configuration directories and creates an application launcher for Linux Desktop Containers.
+It also initializes the configuration directories and creates the main Linux Desktop Containers application entry.
 
 ---
 
@@ -999,7 +1328,7 @@ Linux Desktop Containers
 0) Exit
 ```
 
-The manager self-update feature and advanced configuration panel are still under development.
+Advanced manager self-update and configuration features are still under development.
 
 ---
 
@@ -1011,30 +1340,42 @@ Open:
 Distributions
 ```
 
-Select a distribution followed by a desktop environment.
+Select a distribution and then an available desktop.
 
-Example:
+Examples:
 
 ```text
 Arch Linux
 └── XFCE
 ```
 
-The manager automatically performs:
+```text
+Debian
+└── XFCE
+```
+
+```text
+Fedora
+└── XFCE
+```
+
+The manager performs:
 
 ```text
 Check image
-    |
-    v
+      |
+      v
 docker pull
-    |
-    v
+      |
+      v
 docker create
-    |
-    v
-Configure port and security
-    |
-    v
+      |
+      +--> --shm-size
+      +--> seccomp
+      +--> AppArmor / SELinux based on host
+      +--> dynamic local port
+      |
+      v
 Create application launcher
 ```
 
@@ -1042,12 +1383,12 @@ Create application launcher
 
 ## Desktop management
 
-For an installed desktop, the following operations are currently available:
+For an installed desktop, the current actions are:
 
 ```text
 Start / Open desktop
 Stop
-View status
+Show status
 Update
 Recreate container
 Uninstall
@@ -1056,127 +1397,39 @@ Recreate application launcher
 
 ### Update
 
-Checks the image published in GHCR.
-
-If the remote image has changed, Docker downloads the new version and the manager can recreate the container.
+Checks the image published to GHCR. If the remote image has changed, Docker downloads the required layers and the container can be recreated with the updated image.
 
 ### Recreate container
 
-Removes the existing container and creates a new one from the installed image.
+Removes the current container and creates a new one from the installed image.
 
-> Full home-directory persistence has not yet been implemented. Data stored only inside the container may be lost when recreating it.
+> Full home-directory persistence is not implemented yet. Data stored only inside the container can be lost when recreating it.
 
 ### Uninstall
 
-Removes:
-
-- the container;
-- the application launcher.
-
-The locally stored Docker image can optionally be removed as well.
+Removes the container and its application launcher. It can also optionally remove the local Docker image.
 
 ---
 
 ## Application launchers
 
-Launchers created by Linux Desktop Containers are stored in:
+Generated application launchers are stored in:
 
 ```text
 ~/.local/share/applications/
 ```
 
-For example:
+Examples:
 
 ```text
 linux-desktop-containers-arch-xfce.desktop
+linux-desktop-containers-debian-xfce.desktop
+linux-desktop-containers-fedora-xfce.desktop
 ```
-
-This allows installed distributions to appear in the host desktop environment's application launcher.
-
----
-
-## Graphical connection
-
-The current graphical architecture uses:
-
-```text
-FreeRDP
-   |
-   v
-XRDP
-   |
-   v
-xorgxrdp
-   |
-   v
-Xorg
-   |
-   v
-Desktop environment
-```
-
-The current stable configuration uses:
-
-```text
-RFX
-Software GDI
-Dynamic Resolution
-Clipboard
-Audio
-```
-
----
-
-## Networking
-
-RDP ports are published only on the local interface:
-
-```text
-127.0.0.1
-```
-
-Example:
-
-```text
-127.0.0.1:32770 -> 3389/tcp
-```
-
-Docker can automatically assign a different host port to each container.
-
-The launcher discovers the assigned port before starting FreeRDP.
-
-The user does not need to know the port number.
-
----
-
-## Security
-
-Arch Linux + XFCE uses a custom seccomp profile.
-
-Its purpose is to enable only the additional operations required by the desktop environment and applications that depend on sandboxing mechanisms, without running the entire container with `--privileged`.
-
-The RDP service is exposed only through localhost and is not intended to be directly exposed to the Internet.
-
----
-
-## Current credentials
-
-The Arch Linux + XFCE image currently uses:
-
-```text
-Username: arch
-Password: 1234
-```
-
-The launcher automatically provides these credentials to the RDP client.
-
-This mechanism is expected to be replaced by a more appropriate credential-management solution.
 
 ---
 
 ## Local configuration
-
-The project uses XDG paths to keep user data separate from the cloned repository.
 
 Configuration:
 
@@ -1200,154 +1453,91 @@ State:
 
 ## Image publishing
 
-Images can be automatically built and published using GitHub Actions.
+Images are built and published through GitHub Actions and GitHub Container Registry.
 
-Arch Linux + XFCE currently uses:
+Workflows:
 
 ```text
 .github/workflows/publish-arch-xfce.yml
+.github/workflows/publish-debian-xfce.yml
+.github/workflows/publish-fedora-xfce.yml
 ```
 
-When the Arch XFCE implementation changes and reaches `main`, the workflow can:
-
 ```text
-Checkout
+Push to main
    |
    v
-Build
+GitHub Actions
+   |
+   v
+Checkout
    |
    v
 Login to GHCR
    |
    v
-Push
+docker build
    |
    v
-arch-xfce:latest
+docker push
+   |
+   v
+ghcr.io/fartavia3210-design/linux-desktop-containers/<image>:latest
 ```
 
-Publishing uses the temporary `GITHUB_TOKEN` supplied by GitHub Actions.
+Publishing uses the temporary `GITHUB_TOKEN` provided by GitHub Actions. No Personal Access Token needs to be stored in the repository.
 
-A Personal Access Token does not need to be stored in the repository.
+---
+
+## Current implementation notes
+
+### Arch Linux + XFCE
+
+- Rolling Arch Linux base.
+- XRDP + xorgxrdp.
+- PipeWire.
+- Brave Browser with sandboxing.
+- `--shm-size=1g`.
+- Current RDP profile: `compat-rfx`.
+- Shared seccomp profile.
+
+### Debian 13 + XFCE
+
+- Debian 13 base.
+- XRDP 0.10.x + xorgxrdp.
+- PipeWire, WirePlumber and XRDP audio.
+- Brave Browser with sandboxing.
+- `--shm-size=1g`.
+- Normal RDP profile: `standard`.
+- Exact pure-Arch host override: `compat-rfx`.
+- `light-locker` is disabled in XRDP sessions to avoid locker failures inside the container.
+
+### Fedora 44 + XFCE
+
+- Fedora 44 base.
+- Fedora XRDP and xorgxrdp packages.
+- XFCE 4.20.
+- PipeWire + WirePlumber + `pipewire-module-xrdp`.
+- Brave Browser from the official RPM repository.
+- Brave uses the shared seccomp profile and retains its real sandbox.
+- `--shm-size=1g`.
+- RDP profile: `standard`.
+- The graphical `xfce-polkit` agent is disabled from XRDP autostart while `polkitd` remains available.
+- Smooth graphics performance with the standard configuration.
 
 ---
 
 ## Current limitations
 
-The following features are still pending:
+Still pending:
 
-- full user-data persistence;
-- improved credential management;
-- automatic manager self-update;
-- configuration panel;
-- automatic `apt` dependency installation;
-- automatic `dnf` dependency installation;
-- distribution-specific icons;
-- additional distributions and desktop environments.
-
----
-
-## Docker images
-
-Published images can also be downloaded independently of the manager.
-
-### Arch Linux
-
-#### XFCE
-
-**Available**
-
-```bash
-docker pull ghcr.io/fartavia3210-design/linux-desktop-containers/arch-xfce:latest
-```
-
-#### KDE Plasma
-
-**Pending**
-
-Image not published yet.
-
-#### GNOME
-
-**Pending**
-
-Image not published yet.
-
-### Debian
-
-#### XFCE
-
-**Pending**
-
-Image not published yet.
-
-#### KDE Plasma
-
-**Pending**
-
-Image not published yet.
-
-#### GNOME
-
-**Pending**
-
-Image not published yet.
-
-### Ubuntu
-
-#### XFCE
-
-**Pending**
-
-Image not published yet.
-
-#### KDE Plasma
-
-**Pending**
-
-Image not published yet.
-
-#### GNOME
-
-**Pending**
-
-Image not published yet.
-
-### Fedora
-
-#### XFCE
-
-**Pending**
-
-Image not published yet.
-
-#### KDE Plasma
-
-**Pending**
-
-Image not published yet.
-
-#### GNOME
-
-**Pending**
-
-Image not published yet.
-
-### Xubuntu
-
-#### XFCE
-
-**Pending**
-
-Image not published yet.
-
-### Lubuntu
-
-#### LXQt
-
-**Pending**
-
-Image not published yet.
+- full home-directory persistence;
+- secure and configurable credential management;
+- complete configuration panel;
+- fully automatic manager updates;
+- distribution-specific icons for every desktop;
+- additional distributions and desktop environments;
+- a formal remote-access architecture beyond the current localhost-first mode.
 
 ---
 
@@ -1359,35 +1549,50 @@ New implementations follow:
 distros/<distribution>/<desktop>/
 ```
 
-Once a combination has been built and validated:
+Recommended flow:
 
 ```text
-Implementation
-      |
-      v
-Docker image
-      |
-      v
-GitHub Container Registry
-      |
-      v
+Experimental implementation
+        |
+        v
+Local testing
+        |
+        v
+XRDP validation
+        |
+        +--> graphics
+        +--> dynamic resolution
+        +--> clipboard
+        +--> audio
+        +--> sandbox
+        +--> host security
+        |
+        v
+Integration into distros/
+        |
+        v
+GHCR workflow
+        |
+        v
 catalog.json
-      |
-      v
+        |
+        v
 available: true
-      |
-      v
-Available through linux-desktops
+        |
+        v
+Available in linux-desktops
 ```
+
+Shared changes should preserve host compatibility and avoid global workarounds when an issue belongs only to a specific distribution or environment.
 
 ---
 
 ## License
 
-This project **is not distributed under an open-source license**.
+This project is **not distributed under an open-source license**.
 
 Copyright © 2026. All rights reserved.
 
-The source code is publicly visible for viewing and reference purposes. No permission is granted to copy, modify, redistribute, sublicense or create derivative works without prior authorization from the copyright holder.
+The source code is publicly available for viewing and reference. No permission is granted to copy, modify, redistribute, sublicense or create derivative works without prior authorization from the copyright holder.
 
-See [`LICENSE`](LICENSE) for additional information.
+See [`LICENSE`](LICENSE) for more information.
