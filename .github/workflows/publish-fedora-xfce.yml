@@ -1,0 +1,42 @@
+name: Publish Fedora XFCE
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "distros/fedora/xfce/**"
+      - ".github/workflows/publish-fedora-xfce.yml"
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | \
+          docker login ghcr.io \
+          -u "${{ github.actor }}" \
+          --password-stdin
+
+      - name: Build Fedora XFCE image
+        run: |
+          docker build \
+            --label "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
+            -t ghcr.io/fartavia3210-design/linux-desktop-containers/fedora-xfce:latest \
+            distros/fedora/xfce
+
+      - name: Push Fedora XFCE image
+        run: |
+          docker push \
+            ghcr.io/fartavia3210-design/linux-desktop-containers/fedora-xfce:latest

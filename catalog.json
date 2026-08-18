@@ -151,7 +151,29 @@
       "desktops": {
         "xfce": {
           "name": "XFCE",
-          "available": false
+          "available": true,
+          "image": {
+            "remote": "ghcr.io/fartavia3210-design/linux-desktop-containers/fedora-xfce:latest",
+            "build_context": "distros/fedora/xfce"
+          },
+          "container": {
+            "name": "ldc-fedora-xfce",
+            "port": 3389,
+            "host_port": "auto",
+            "shm_size": "1g"
+          },
+          "rdp": {
+            "user": "fedora",
+            "password": "1234",
+            "default_profile": "standard"
+          },
+          "security": {
+            "seccomp": "common/security/seccomp-brave.json",
+            "apparmor": "linux-desktop-containers"
+          },
+          "shortcut": {
+            "name": "Fedora XFCE"
+          }
         },
 
         "kde": {

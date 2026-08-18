@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+# ============================================================
+# Entorno de sesión XFCE / X11
+# ============================================================
+
+export XDG_SESSION_TYPE=x11
+export XDG_CURRENT_DESKTOP=XFCE
+export XDG_SESSION_DESKTOP=xfce
+export DESKTOP_SESSION=xfce
+
+export XDG_RUNTIME_DIR="/run/user/$(id -u)"
+
+unset DBUS_SESSION_BUS_ADDRESS
+
+# ============================================================
+# Sesión D-Bus + PipeWire + XFCE
+# ============================================================
+
+exec dbus-run-session -- bash -c '
+    pipewire > /tmp/pipewire.log 2>&1 &
+
+    for i in $(seq 1 20); do
+        if [ -S "$XDG_RUNTIME_DIR/pipewire-0" ]; then
+            break
+        fi
+
+        sleep 0.1
+    done
+
+    pipewire-pulse > /tmp/pipewire-pulse.log 2>&1 &
+    wireplumber > /tmp/wireplumber.log 2>&1 &
+
+    for i in $(seq 1 30); do
+        if pactl info >/dev/null 2>&1; then
+            break
+        fi
+
+        sleep 0.1
+    done
+
+    exec startxfce4
+'
