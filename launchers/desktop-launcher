@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import subprocess
 import sys
 import time
@@ -24,7 +25,10 @@ from manager.containers import (
     get_host_port,
     start_container,
 )
-from manager.dependencies import detect_freerdp
+from manager.dependencies import (
+    detect_freerdp,
+    detect_host_distro,
+)
 from manager.rdp_profiles import (
     RDPProfileError,
     resolve_rdp_profile,
@@ -165,8 +169,24 @@ def launch_rdp(
         *rdp_arguments,
     ]
 
+    env = os.environ.copy()
+    host = detect_host_distro()
+
+    # Workaround para FreeRDP 3.30 en Omarchy.
+    #
+    # En este host, VAAPI puede fallar al decodificar
+    # H.264/AVC420 y producir una sesión XRDP negra.
+    #
+    # Deshabilitar VAAPI únicamente para el proceso
+    # FreeRDP hace que utilice el decoder por software,
+    # conservando AVC420, audio, resolución dinámica
+    # y un rendimiento considerablemente mejor que RFX.
+    if host.get("id") == "omarchy":
+        env["LIBVA_DRIVER_NAME"] = "disabled"
+
     subprocess.run(
         command,
+        env=env,
         check=False
     )
 
